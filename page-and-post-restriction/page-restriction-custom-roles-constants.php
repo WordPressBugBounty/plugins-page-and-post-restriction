@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 class papr_custom_roles_constants {
 	public static function papr_custom_roles_constants_names() {
 

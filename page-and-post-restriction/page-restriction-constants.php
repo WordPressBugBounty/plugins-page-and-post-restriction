@@ -15,3 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Papr_Plugin_Links {
 	const PREMIUM_PLANS = 'https://plugins.miniorange.com/wordpress-page-restriction#pricing';
 }
+
+class Papr_Plugin_Constants {
+	const VERSION = '1.3.7';
+}

@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-save.php';
 require_once 'page-restriction-utility.php';
@@ -21,10 +25,12 @@ function papr_page_access() {
 	$default_login_toggle   = $default_login_toggle != '' ? $default_login_toggle : '';
 
 	$mo_page_search_value = '';
-	if ( array_key_exists( 'search', $_GET ) ) {
-		$mo_page_search_value = sanitize_text_field( $_GET['search'] );
-	}
-
+		if (isset( $_GET['search'] ) && isset( $_GET['_wpnonces'] ) )  {
+			$nonce = check_admin_referer( 'papr_search_page', '_wpnonces' );
+			if ( $nonce ) 
+			$mo_page_search_value = sanitize_text_field( wp_unslash( $_GET['search'] ) );
+		}
+	
 	?>
 
 

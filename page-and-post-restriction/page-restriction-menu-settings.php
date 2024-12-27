@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-page-access.php';
 require_once 'page-restriction-post-access.php';
 require_once 'page-restriction-custom-roles.php';
@@ -12,8 +16,11 @@ require_once 'page-restriction-utility.php';
 	Function to display the correct page content based on the active tab. */
 function papr_page_restriction() {
 	$current_tab = '';
+	if ( isset( $_GET['papr_wpnonce'] ) && ! check_admin_referer('papr_menu_setting_nonce','papr_wpnonce') ) {
+		return;
+	}
 	if ( array_key_exists( 'tab', $_GET ) ) {
-		$current_tab = sanitize_text_field( $_GET['tab'] );
+		$current_tab = sanitize_text_field( wp_unslash( $_GET['tab'] ) );
 	} ?>
 
 	<div class="papr-bg-main papr-margin-left">
@@ -81,7 +88,9 @@ function papr_page_restriction() {
 			</div>
 
 			<div class="col-md-3 papr_support_col ps-0 pe-0">
-				<?php papr_support_page_restriction(); ?>
+				<?php
+				papr_support_page_restriction();
+				?>
 			</div>
 		</div>
 
@@ -100,6 +109,8 @@ function papr_set_active_tab( $current_tab, $tab_name ) {
 }
 
 function papr_nav_tab( $current_tab ) {
+	$nonce = wp_create_nonce('papr_custom_role_submenu');
+	$tab_nonce = wp_create_nonce('papr_menu_setting_nonce');
 	?>
 	<div class="wrap shadow-cstm p-3 me-0 mt-0 mo-saml-margin-left bg-white">
 		<div class="row align-items-center">
@@ -115,20 +126,32 @@ function papr_nav_tab( $current_tab ) {
 		</div>
 	</div>
 	<div class="nav-tab-wrapper papr-bg-main papr-margin-add">
-		<a class="nav-tab papr-nav-tab ms-3 <?php echo esc_attr( papr_set_active_tab( $current_tab, '' ) ); ?>" href="admin.php?page=page_restriction"> Page Access
-		</a>
-		<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, 'post_access' ) ); ?>" href="admin.php?page=page_restriction&tab=post_access"> Post Access
-		</a>
-		<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, 'custom_restriction' ) ); ?>" href="admin.php?page=page_restriction&tab=custom_restriction"> Block Access
-		</a>
-		<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, 'tag_access' ) ); ?>" href="admin.php?page=page_restriction&tab=tag_access"> Tag Access
-		</a>
-		<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, 'category_access' ) ); ?>" href="admin.php?page=page_restriction&tab=category_access"> Category Access
-		</a>
-		<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, 'custom_role' ) ); ?>" href="admin.php?page=papr_custom_roles_sub_menu"> Roles and Capabilities
-		</a>
-		<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, 'account_setup' ) ); ?>" href="admin.php?page=page_restriction&tab=account_setup"> Account Setup
-		</a>
+		<?php
+			$base_url = admin_url( 'admin.php?page=page_restriction' );
+
+			$tab_names_array = array(
+				'Page Access'            => '',
+				'Post Access'            => 'post_access',
+				'Block Access'           => 'custom_restriction',
+				'Tag Access'             => 'tag_access',
+				'Category Access'        => 'category_access',
+				'Roles and Capabilities' => 'custom_role',
+				'Account Setup'          => 'account_setup',
+			);
+			
+			foreach ( $tab_names_array as $tab_name => $tab_value ) {
+				if ( $tab_name === 'Roles and Capabilities' ) {
+					$tab_url = htmlspecialchars_decode( wp_nonce_url( admin_url( 'admin.php?page=papr_custom_roles_sub_menu' ), 'papr_custom_role_submenu', 'papr_wpnonce' ) );
+				} else {
+					$tab_url = htmlspecialchars_decode( wp_nonce_url( $base_url . ( $tab_value ? '&tab=' . $tab_value : '' ), 'papr_menu_setting_nonce', 'papr_wpnonce' ) );
+				}
+				?>
+				<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, $tab_value ) ); ?>" href="<?php echo esc_url( $tab_url ); ?>">
+					<?php echo esc_html( $tab_name ); ?>
+				</a>
+				<?php
+			}
+?>
 	</div>
 	<?php
 }

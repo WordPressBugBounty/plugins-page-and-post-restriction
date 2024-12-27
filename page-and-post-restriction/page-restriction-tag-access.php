@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-page-access.php';
 
@@ -13,7 +17,7 @@ function papr_tag_access() {
 		<div>
 			<h4 class="papr-form-head">Give Access to Tags based on Roles and Login Status</h4>
 			<div class="papr-prem-info">
-				<div class="papr-prem-icn papr-prem-cat-icn"><img src="https://img.icons8.com/color/48/000000/lock--v2.png" width="35px">
+				<div class="papr-prem-icn papr-prem-cat-icn"><img src="<?php echo esc_url( plugin_dir_url( __FILE__ ) ); ?>includes/images/lock.png" width="35px">
 					<p class="papr-prem-info-text">Available in <b>Paid</b> versions of the plugin. <a href="<?php echo esc_url( Papr_Plugin_Links::PREMIUM_PLANS ); ?>" class="text-warning" target="_blank">Click here to upgrade</a></p>
 				</div>
 				<h5 class="papr-form-head papr-form-head-bar mt-2 mb-4">Tag Restrictions

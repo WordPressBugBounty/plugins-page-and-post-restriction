@@ -1,21 +1,25 @@
 <?php
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require 'page-restriction-class-customer.php';
 require_once 'page-and-post-restriction.php';
 require_once 'page-restriction-utility.php';
 
 function papr_save_setting() {
-
-	if ( papr_check_option_admin_referer( 'papr_custom_create_roles' ) ) {
+	if ( papr_check_form_option( 'papr_custom_create_roles' ) && check_admin_referer( 'papr_custom_create_roles' ) ) {
 		unset( $_POST['_wpnonce'] );
 		unset( $_POST['_wp_http_referer'] );
 		unset( $_POST['option'] );
-		$custom_role_name         = stripslashes( sanitize_text_field( $_POST['custom_role_name'] ) );
+		$custom_role_name         = papr_get_sanitized_post_option('sanitize_text_field', 'custom_role_name');
 		$custom_role_display_name = $custom_role_name;
 		$custom_role_name         = strtolower( str_replace( ' ', '_', $custom_role_name ) );
 		unset( $_POST['custom_role_name'] );
 
 		global $wp_roles;
-		$roles = $wp_roles->roles;
+		$roles = $wp_roles->roles;	
 
 		if ( ! empty( $roles[ $custom_role_name ] ) ) {
 			update_option( 'papr_message', 'Role you trying to create already exist. Please Navigate to Edit Role tab to Edit it.' );
@@ -32,15 +36,16 @@ function papr_save_setting() {
 
 		update_option( 'papr_message', 'New Role ' . $custom_role_name . ' Added Successfully' );
 		update_option( 'papr_message_success_fail', 'success' );
-		wp_redirect( admin_url( '/admin.php?page=papr_custom_roles_sub_menu' ) );
+		$nonce = wp_create_nonce('papr_custom_role_submenu'); 
+		wp_safe_redirect( admin_url( '/admin.php?page=papr_custom_roles_sub_menu&_wpnonce=' . $nonce ) );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_custom_edit_roles' ) ) {
+	if ( papr_check_form_option( 'papr_custom_edit_roles' ) && check_admin_referer( 'papr_custom_edit_roles' ) ) {
 		unset( $_POST['_wpnonce'] );
 		unset( $_POST['_wp_http_referer'] );
 		unset( $_POST['option'] );
-		$custom_role_name         = stripslashes( sanitize_text_field( $_POST['custom_role_name'] ) );
+		$custom_role_name         = papr_get_sanitized_post_option('sanitize_text_field', 'custom_role_name');
 		$custom_role_display_name = $custom_role_name;
 		$custom_role_name         = strtolower( str_replace( ' ', '_', $custom_role_name ) );
 		unset( $_POST['custom_role_name'] );
@@ -65,25 +70,26 @@ function papr_save_setting() {
 
 		update_option( 'papr_message', $custom_role_name . ' Role Edited Successfully' );
 		update_option( 'papr_message_success_fail', 'success' );
-		wp_redirect( admin_url( '/admin.php?page=papr_custom_roles_sub_menu' ) );
+		$nonce = wp_create_nonce('papr_custom_role_submenu');
+		wp_safe_redirect( admin_url( '/admin.php?page=papr_custom_roles_sub_menu&_wpnonce=' . $nonce ) );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_delete_custom_roles' ) ) {
-		$role_delete = sanitize_text_field( $_POST['role_delete'] );
+	if ( papr_check_form_option( 'papr_delete_custom_roles' ) && check_admin_referer( 'papr_delete_custom_roles' ) ) {
+		$role_delete = papr_get_sanitized_post_option('sanitize_text_field', 'role_delete');
 		remove_role( $role_delete );
 		update_option( 'papr_message', $role_delete . ' Role Deleted Successfully' );
 		update_option( 'papr_message_success_fail', 'success' );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'roles_per_page' ) ) {
-		$roles_per_page = sanitize_text_field( $_POST['roles_per_page'] );
+	if ( papr_check_form_option( 'roles_per_page' ) && check_admin_referer( 'roles_per_page' ) ) {
+		$roles_per_page = papr_get_sanitized_post_option('sanitize_text_field', 'roles_per_page');
 		update_option( 'papr_roles_per_page', $roles_per_page );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_restrict_pages_roles_login' ) ) {
+	if ( papr_check_form_option( 'papr_restrict_pages_roles_login' ) && check_admin_referer( 'papr_restrict_pages_roles_login' ) ) {
 		unset( $_POST['_wpnonce'] );
 		unset( $_POST['_wp_http_referer'] );
 		unset( $_POST['option'] );
@@ -130,16 +136,17 @@ function papr_save_setting() {
 			$default = 'mo_page_default_role_' . $pageid;
 
 			if ( array_key_exists( $roles, $_POST ) ) {
+					$roles_posted = papr_get_sanitized_post_option('sanitize_text_field', $roles );
 				if ( $pageid == 0 ) {
 					$selected_roles_array = array();
-					foreach ( $_POST[ $roles ] as $key => $value ) {
-						array_push( $selected_roles_array, sanitize_text_field( $value ) );
+					foreach ( $roles_posted as $key => $value ) {
+						array_push( $selected_roles_array, $value );
 					}
 					$allowed_roles['mo_page_0'] = $selected_roles_array;
 				} else {
 					$selected_roles_array = array();
-					foreach ( $_POST[ $roles ] as $key => $value ) {
-						array_push( $selected_roles_array, sanitize_text_field( $value ) );
+					foreach ( $roles_posted as $key => $value ) {
+						array_push( $selected_roles_array, $value );
 					}
 					$allowed_roles[ $pageid ] = $selected_roles_array;
 				}
@@ -195,7 +202,7 @@ function papr_save_setting() {
 							unset( $_POST[ $roles_child ] );
 
 							if ( array_key_exists( $login, $_POST ) ) {
-								$_POST[ $login_child ] = sanitize_text_field( $_POST[ $login ] );
+								$_POST[ $login_child ] = papr_get_sanitized_post_option('sanitize_text_field', $login );
 							} else {
 								unset( $_POST[ $login_child ] );
 							}
@@ -245,7 +252,7 @@ function papr_save_setting() {
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_restrict_post_roles_login' ) ) {
+	if ( papr_check_form_option( 'papr_restrict_post_roles_login' ) && check_admin_referer( 'papr_restrict_post_roles_login' ) ) {
 
 		$allowed_roles                 = get_option( 'papr_allowed_roles_for_posts' );
 		$restrictedpost                = get_option( 'papr_restricted_posts' );
@@ -282,8 +289,9 @@ function papr_save_setting() {
 
 			if ( array_key_exists( $roles, $_POST ) ) {
 				$selected_roles_array = array();
-				foreach ( $_POST[ $roles ] as $key => $value ) {
-					array_push( $selected_roles_array, sanitize_text_field( $value ) );
+				$roles_posted = papr_get_sanitized_post_option('sanitize_text_field', $roles );
+				foreach ( $roles_posted as $key => $value ) {
+					array_push( $selected_roles_array, $value );
 				}
 				$allowed_roles[ $postid ] = $selected_roles_array;
 
@@ -321,31 +329,31 @@ function papr_save_setting() {
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_results_per_page' ) ) {
-		$results_per_page = sanitize_text_field( $_POST['papr_results_per_page'] );
+	if ( papr_check_form_option( 'papr_results_per_page' ) && check_admin_referer( 'papr_results_per_page' ) ) {
+		$results_per_page = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_results_per_page' );
 		update_option( 'papr_results_per_page', $results_per_page );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_search_page' ) ) {
-		$mo_page_search_value = stripslashes( sanitize_text_field( $_POST['mo_page_search'] ) );
+	if ( papr_check_form_option( 'papr_search_page' ) && check_admin_referer( 'papr_search_page' ) ) {
+		$mo_page_search_value = papr_get_sanitized_post_option( 'sanitize_text_field', 'mo_page_search' );
 		update_option( 'papr_page_search_value', $mo_page_search_value );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_search_post' ) ) {
-		$mo_post_search_value = stripslashes( sanitize_text_field( $_POST['mo_post_search'] ) );
+	if ( papr_check_form_option( 'papr_search_post' ) && check_admin_referer( 'papr_search_post' ) ) {
+		$mo_post_search_value = papr_get_sanitized_post_option( 'sanitize_text_field', 'mo_post_search' );
 		update_option( 'papr_post_search_value', $mo_post_search_value );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_post_type' ) ) {
-		$mo_post_type = sanitize_text_field( $_POST['papr_post_type'] );
+	if ( papr_check_form_option( 'papr_post_type' ) && check_admin_referer( 'papr_post_type' ) ) {
+		$mo_post_type = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_post_type' );
 		update_option( 'papr_post_type', $mo_post_type );
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_default_role_parent_page_toggle' ) ) {
+	if ( papr_check_form_option( 'papr_default_role_parent_page_toggle' ) && check_admin_referer( 'papr_default_role_parent_page_toggle' ) ) {
 		if ( isset( $_POST['papr_default_role_parent_page_toggle'] ) ) {
 
 			$allowed_roles          = get_option( 'papr_allowed_roles_for_pages' );
@@ -421,7 +429,7 @@ function papr_save_setting() {
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_access_for_only_loggedin' ) ) {
+	if ( papr_check_form_option( 'papr_access_for_only_loggedin' ) && check_admin_referer( 'papr_access_for_only_loggedin' ) ) {
 		if ( isset( $_POST['papr_access_for_only_loggedin'] ) ) {
 			$unrestricted_pages = array();
 			update_option( 'papr_login_unrestricted_pages', $unrestricted_pages );
@@ -436,7 +444,7 @@ function papr_save_setting() {
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_restrict_pages_rest_api' ) ) {
+	if ( papr_check_form_option( 'papr_restrict_pages_rest_api' ) && check_admin_referer( 'papr_restrict_pages_rest_api' ) ) {
 		if ( isset( $_POST['papr_restrict_pages_rest_api'] ) ) {
 			update_option( 'papr_restrict_pages_rest_api', "true" );
 		} else {
@@ -445,7 +453,7 @@ function papr_save_setting() {
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_access_for_only_loggedin_posts' ) ) {
+	if ( papr_check_form_option( 'papr_access_for_only_loggedin_posts' ) && check_admin_referer( 'papr_access_for_only_loggedin_posts' ) ) {
 		if ( isset( $_POST['papr_access_for_only_loggedin_posts'] ) ) {
 			$unrestricted_post = array();
 			update_option( 'papr_login_unrestricted_posts', $unrestricted_post );
@@ -460,35 +468,26 @@ function papr_save_setting() {
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_restrict_posts_rest_api' ) ) {
-		if ( isset( $_POST['papr_restrict_posts_rest_api'] ) ) {
-			update_option( 'papr_restrict_posts_rest_api', "true" );
-		} else {
-			update_option( 'papr_restrict_posts_rest_api', "false" );
-		}
-		return;
-	}
-
-	if ( papr_check_option_admin_referer( 'papr_post_per_page' ) ) {
-		$results_per_page = sanitize_text_field( $_POST['papr_post_per_page'] );
+	if ( papr_check_form_option( 'papr_post_per_page' ) && check_admin_referer( 'papr_post_per_page' ) ) {
+		$results_per_page = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_post_per_page' );
 		update_option( 'papr_post_per_page', $results_per_page );
 
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_category_per_page' ) ) {
-		$results_per_page = sanitize_text_field( $_POST['papr_category_per_page'] );
+	if ( papr_check_form_option( 'papr_category_per_page' ) && check_admin_referer( 'papr_category_per_page' ) ) {
+		$results_per_page = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_category_per_page' );
 		update_option( 'papr_category_per_page', $results_per_page );
 
 		return;
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_tag_per_page' ) ) {
-		$results_per_page = sanitize_text_field( $_POST['papr_tag_per_page'] );
+	if ( papr_check_form_option( 'papr_tag_per_page' ) && check_admin_referer( 'papr_tag_per_page' ) ) {
+		$results_per_page = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_tag_per_page' );
 		update_option( 'papr_tag_per_page', $results_per_page );
 
 		return;
-	} elseif ( papr_check_option_admin_referer( 'papr_contact_us_query_option' ) ) {
+	} elseif ( papr_check_form_option( 'papr_contact_us_query_option' ) && check_admin_referer( 'papr_contact_us_query_option' ) ) {
 
 		if ( ! papr_is_curl_installed() ) {
 			update_option( 'papr_message', 'ERROR: <a href="http://php.net/manual/en/curl.installation.php" target="_blank">PHP cURL extension</a> is not installed or disabled. Query submit failed.' );
@@ -497,9 +496,9 @@ function papr_save_setting() {
 		}
 
 		// Contact Us query
-		$email = sanitize_email( $_POST['papr_contact_us_email'] );
-		$phone = htmlspecialchars( $_POST['papr_contact_us_phone'] );
-		$query = htmlspecialchars( $_POST['papr_contact_us_query'] );
+		$email = papr_get_sanitized_post_option( 'sanitize_email', 'papr_contact_us_email' );
+		$phone = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_contact_us_phone' );
+		$query = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_contact_us_query' );
 
 		$customer = new Customer_page_restriction();
 		if ( papr_check_empty_or_null( $email ) || papr_check_empty_or_null( $query ) ) {
@@ -520,20 +519,20 @@ function papr_save_setting() {
 				}
 			}
 		}
-	} elseif ( papr_check_option_admin_referer( 'papr_change_miniorange' ) ) {
+	} elseif ( papr_check_form_option( 'papr_change_miniorange' ) && check_admin_referer( 'papr_change_miniorange' ) ) {
 		papr_remove_account();
 		update_option( 'papr_guest_enabled', true );
 		return;
-	} elseif ( papr_check_option_admin_referer( 'papr_go_back' ) ) {
+	} elseif ( papr_check_form_option( 'papr_go_back' ) && check_admin_referer( 'papr_go_back' ) ) {
 		update_option( 'papr_registration_status', '' );
 		update_option( 'papr_verify_customer', '' );
 		delete_option( 'papr_new_registration' );
 		delete_option( 'papr_admin_email' );
 		delete_option( 'papr_admin_phone' );
-	} elseif ( papr_check_option_admin_referer( 'papr_goto_login' ) ) {
+	} elseif ( papr_check_form_option( 'papr_goto_login' ) && check_admin_referer( 'papr_goto_login' ) ) {
 		delete_option( 'papr_new_registration' );
 		update_option( 'papr_verify_customer', 'true' );
-	} elseif ( papr_check_option_admin_referer( 'papr_forgot_password_form_option' ) ) {
+	} elseif ( papr_check_form_option( 'papr_forgot_password_form_option' ) && check_admin_referer( 'papr_forgot_password_form_option' ) ) {
 		if ( ! papr_is_curl_installed() ) {
 			update_option( 'papr_message', 'ERROR: <a href="http://php.net/manual/en/curl.installation.php" target="_blank">PHP cURL extension</a> is not installed or disabled. Resend OTP failed.' );
 			papr_show_error_message();
@@ -552,26 +551,22 @@ function papr_save_setting() {
 				update_option( 'papr_message_success_fail', 'error' );
 			}
 		}
-	} elseif ( papr_check_option_admin_referer( 'papr_verify_customer' ) ) {    // register the admin to miniOrange
+	} elseif ( papr_check_form_option( 'papr_verify_customer' ) && check_admin_referer( 'papr_verify_customer' ) ) {    // register the admin to miniOrange
 		if ( ! papr_is_curl_installed() ) {
 			update_option( 'papr_message', 'ERROR: <a href="http://php.net/manual/en/curl.installation.php" target="_blank">PHP cURL extension</a> is not installed or disabled. Login failed.' );
 			update_option( 'papr_message_success_fail', 'error' );
 			return;
 		}
-
-		$email    = '';
-		$password = '';
-		if ( papr_check_empty_or_null( $_POST['email'] ) || papr_check_empty_or_null( $_POST['password'] ) ) {
+		$email    = papr_get_sanitized_post_option( 'sanitize_email', 'email' );
+		$password = papr_get_sanitized_post_option( 'sanitize_text_field', 'password' );
+		if ( papr_check_empty_or_null( $email ) || papr_check_empty_or_null( $password ) ) {
 			update_option( 'papr_message', 'All the fields are required. Please enter valid entries.' );
 			update_option( 'papr_message_success_fail', 'error' );
 			return;
-		} elseif ( papr_check_password_pattern( htmlspecialchars( $_POST['password'] ) ) ) {
+		} elseif ( papr_check_password_pattern( htmlspecialchars( $password ) ) ) {
 			update_option( 'papr_message', 'Minimum 6 characters should be present. Maximum 15 characters should be present. Only following symbols (!@#.$%^&*-_) should be present.' );
 			update_option( 'papr_message_success_fail', 'error' );
 			return;
-		} else {
-			$email    = sanitize_email( $_POST['email'] );
-			$password = stripslashes( htmlspecialchars( $_POST['password'] ) );
 		}
 
 		update_option( 'papr_admin_email', $email );
@@ -591,7 +586,7 @@ function papr_save_setting() {
 				update_option( 'papr_registration_status', 'Existing User' );
 				delete_option( 'papr_verify_customer' );
 				update_option( 'papr_message_success_fail', 'success' );
-				wp_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
+				wp_safe_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
 				exit;
 			} else {
 				update_option( 'papr_message', 'Invalid username or password. Please try again.' );
@@ -599,7 +594,7 @@ function papr_save_setting() {
 			}
 			update_option( 'papr_admin_password', '' );
 		}
-	} elseif ( papr_check_option_admin_referer( 'papr_register_customer' ) ) {
+	} elseif ( papr_check_form_option( 'papr_register_customer' ) && check_admin_referer( 'papr_register_customer' ) ) {
 		$user = wp_get_current_user();
 		if ( ! papr_is_curl_installed() ) {
 			update_option( 'papr_message', 'ERROR: <a href="http://php.net/manual/en/curl.installation.php" target="_blank">PHP cURL extension</a> is not installed or disabled. Registration failed.' );
@@ -607,26 +602,22 @@ function papr_save_setting() {
 			return;
 		}
 
-		$email           = '';
-		$password        = '';
-		$confirmPassword = '';
+		$email           = papr_get_sanitized_post_option('sanitize_email', 'email');
+		$password        = papr_get_sanitized_post_option('sanitize_text_field', 'password');
+		$confirmPassword = papr_get_sanitized_post_option('sanitize_text_field', 'confirmPassword');
 
-		if ( papr_check_empty_or_null( $_POST['email'] ) || papr_check_empty_or_null( $_POST['password'] ) || papr_check_empty_or_null( $_POST['confirmPassword'] ) ) {
+		if ( papr_check_empty_or_null( $email ) || papr_check_empty_or_null( $password ) || papr_check_empty_or_null( $confirmPassword ) ) {
 			update_option( 'papr_message', 'Please enter the required fields.' );
 			update_option( 'papr_message_success_fail', 'error' );
 			return;
-		} elseif ( ! filter_var( $_POST['email'], FILTER_VALIDATE_EMAIL ) ) {
+		} elseif ( ! filter_var( $email, FILTER_VALIDATE_EMAIL ) ) {
 			update_option( 'papr_message', 'Please enter a valid email address.' );
 			update_option( 'papr_message_success_fail', 'error' );
 			return;
-		} elseif ( papr_check_password_pattern( htmlspecialchars( $_POST['password'] ) ) ) {
+		} elseif ( papr_check_password_pattern( htmlspecialchars( $password ) ) ) {
 			update_option( 'papr_message', 'Minimum 6 characters should be present. Maximum 15 characters should be present. Only following symbols (!@#.$%^&*-_) should be present.' );
 			update_option( 'papr_message_success_fail', 'error' );
 			return;
-		} else {
-			$email           = sanitize_email( $_POST['email'] );
-			$password        = stripslashes( htmlspecialchars( $_POST['password'] ) );
-			$confirmPassword = stripslashes( htmlspecialchars( $_POST['confirmPassword'] ) );
 		}
 		update_option( 'papr_admin_email', $email );
 
@@ -640,25 +631,25 @@ function papr_save_setting() {
 					$response = papr_create_customer();
 					if ( is_array( $response ) && ! empty( $response['status'] ) && $response['status'] == 'success' ) {
 						update_option( 'papr_message', 'Customer created successfully.' );
-						wp_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
+						wp_safe_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
 						update_option( 'papr_message_success_fail', 'success' );
 						exit;
 					} else {
 						update_option( 'papr_message', 'This is not a valid email. Please enter a valid email.' );
-						wp_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
+						wp_safe_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
 						update_option( 'papr_message_success_fail', 'error' );
 						exit;
 					}
 				} elseif ( strcasecmp( $content['status'], 'INVALID_EMAIL' ) == 0 ) {
 					update_option( 'papr_message', 'This is not a valid email. Please enter a valid email.' );
-					wp_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
+					wp_safe_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
 					update_option( 'papr_message_success_fail', 'error' );
 					exit;
 				} else {
 					$response = papr_get_current_customer();
 					if ( is_array( $response ) && ! empty( $response['status'] ) && $response['status'] == 'success' ) {
 						update_option( 'papr_message', 'Customer Retrieved Successfully.' );
-						wp_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
+						wp_safe_redirect( admin_url( '/admin.php?page=page_restriction&tab=account_setup' ), 301 );
 						update_option( 'papr_message_success_fail', 'success' );
 						exit;
 					}
@@ -670,27 +661,27 @@ function papr_save_setting() {
 			update_option( 'papr_message_success_fail', 'error' );
 		}
 		return;
-	} elseif ( papr_check_option_admin_referer( 'papr_skip_feedback' ) ) {
+	} elseif ( papr_check_form_option( 'papr_skip_feedback' ) && check_admin_referer( 'papr_skip_feedback' ) ) {
 		update_option( 'papr_message', 'Plugin deactivated successfully' );
 		update_option( 'papr_message_success_fail', 'success' );
 		deactivate_plugins( 'page-and-post-restriction\page-and-post-restriction.php' );
-		wp_redirect( 'plugins.php' );
+		wp_safe_redirect( 'plugins.php' );
 	}
 
-	if ( papr_check_option_admin_referer( 'papr_feedback' ) ) {
+	if ( papr_check_form_option( 'papr_feedback' ) && check_admin_referer( 'papr_feedback' ) ) {
 		$user                      = wp_get_current_user();
 		$message                   = 'Plugin Deactivated';
-		$deactivate_reason_message = array_key_exists( 'papr_query_feedback', $_POST ) ? htmlspecialchars( $_POST['papr_query_feedback'] ) : false;
+		$deactivate_reason_message = ! empty( $_POST['papr_query_feedback'] ) ? sanitize_text_field( wp_unslash( $_POST['papr_query_feedback'] ) ) : false;
 		$message                  .= ', Feedback : ' . $deactivate_reason_message . '';
 		$reason                    = '';
 		if ( isset( $_POST['papr_reason'] ) ) {
-				$reason = htmlspecialchars( $_POST['papr_reason'] );
+				$reason = sanitize_text_field( wp_unslash( $_POST['papr_reason'] ) );
 		}
 
 		$email    = '';
 		$message .= ', [Reason :' . $reason . ']';
 		if ( isset( $_POST['papr_query_mail'] ) ) {
-			$email = sanitize_email( $_POST['papr_query_mail'] );
+			$email = sanitize_email( wp_unslash( $_POST['papr_query_mail'] ) );
 		}
 		if ( ! filter_var( $email, FILTER_VALIDATE_EMAIL ) ) {
 			$email = get_option( 'papr_admin_email' );
@@ -703,7 +694,7 @@ function papr_save_setting() {
 		if ( ! is_null( $feedback_reasons ) ) {
 			if ( ! papr_is_curl_installed() ) {
 				deactivate_plugins( 'page-and-post-restriction\page-and-post-restriction.php' );
-				wp_redirect( 'plugins.php' );
+				wp_safe_redirect( 'plugins.php' );
 			} else {
 				$submited = json_decode( $feedback_reasons->papr_send_email_alert( $email, $phone, $message ), true );
 
@@ -720,7 +711,7 @@ function papr_save_setting() {
 				}
 
 				deactivate_plugins( 'page-and-post-restriction\page-and-post-restriction.php' );
-				wp_redirect( 'plugins.php' );
+				wp_safe_redirect( 'plugins.php' );
 				update_option( 'papr_message', 'Thank you for the feedback.' );
 				update_option( 'papr_message_success_fail', 'success' );
 			}

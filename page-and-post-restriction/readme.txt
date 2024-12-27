@@ -1,11 +1,11 @@
-===Page Restriction WordPress (WP) - Protect WP Pages/Post===
+===Page and Post Restriction===
 Contributors: miniOrange
 Donate link: https://miniorange.com
-Tags: Content Restriction, Page Restriction, Restrict content, Post restriction, Restrict access
-Tested up to: 6.5
-Requires PHP: 5.4
+Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction, Restrict Access
+Tested up to: 6.7
+Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.3.6
+Stable tag: 1.3.7
 License: MIT/Expat
 License URI: https://docs.miniorange.com/mit-license
 
@@ -116,6 +116,9 @@ If you are still nervous about your website security or how the plugin would wor
 
 == Changelog ==
 
+= 1.3.7 =
+* Adding Restriction on WP Pages, Posts, Comments, and Search REST API
+
 = 1.3.6 =
 * Restricted the Rest API endpoint for the Pages and Posts
 * Made Few UI Changes in the Plugin.
@@ -206,6 +209,9 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.3.7 =
+* Adding Restriction on WP Pages, Posts, Comments, and Search REST API
 
 = 1.3.6 =
 * Restricted the Rest API endpoint for the Pages and Posts

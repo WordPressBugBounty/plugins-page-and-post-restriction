@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-save.php';
 require_once 'page-restriction-custom-roles-constants.php';
@@ -61,7 +65,7 @@ class papr_custom_roles {
 				if ( $disabled == '' ) {
 					echo 'Add New Roles';
 				} else {
-					echo 'Edit Roles : <b style="color:#00008B;">' . $current_edit_role . '</b>';
+					echo 'Edit Roles : <b style="color:#00008B;">' . esc_html( $current_edit_role ) . '</b>';
 				}
 
 				if ( $disabled == '' ) {
@@ -198,7 +202,7 @@ class papr_custom_roles {
 						}
 						?>
 								<a onclick="hide_function('<?php echo esc_js( $key_js_function ); ?>');" class="roles_buttons">
-									<div class="div_button" id="<?php echo esc_attr( $key_js_function ); ?>_button" style="width:170px;height:40px; padding-left:10px; padding-top:5px; background-color:<?php echo $background_color; ?>;">
+									<div class="div_button" id="<?php echo esc_js( $key_js_function ); ?>_button" style="width:170px;height:40px; padding-left:10px; padding-top:5px; background-color:<?php echo esc_attr( $background_color ); ?>;">
 										<i style="vertical-align:middle !important;" class="<?php echo esc_attr( $value ); ?>"></i>
 										<span class="label"><?php echo esc_html( $key_up ); ?></span>
 									</div>
@@ -323,7 +327,8 @@ class papr_custom_roles {
 		$number_of_pages_in_pagination = ceil( $total_roles / $roles_per_page );
 
 		$current_page    = papr_get_current_page( $number_of_pages_in_pagination );
-		$link            = get_admin_url() . 'admin.php?page=papr_custom_roles_sub_menu&curr=';
+		$nonce = wp_create_nonce('papr_custom_role_submenu');
+		$link            = get_admin_url() . 'admin.php?page=papr_custom_roles_sub_menu&curr=&_wpnonce=' . $nonce;
 		$offset          = ( $current_page - 1 ) * $roles_per_page;
 		$paginated_roles = array_slice( $roles, $offset, $roles_per_page );
 		?>
@@ -421,7 +426,7 @@ class papr_custom_roles {
 	}
 
 	public static function delete_role_modal() {
-		wp_enqueue_style( 'papr_admin_plugin_feedback_style', plugins_url( '/includes/css/papr_feedback_style.min.css', __FILE__ ) );
+		wp_enqueue_style( 'papr_admin_plugin_feedback_style', plugins_url( '/includes/css/papr_feedback_style.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
 		?>
 		<div id="papr_delete_role_modal" class="mo_papr_modal_role">
 			<div class="mo_papr_delete_role_content">
@@ -456,8 +461,9 @@ class papr_custom_roles {
 		$current_user_roles = $user->roles;
 		$current_user_roles = array_flip( $current_user_roles );
 		foreach ( $paginated_roles as $key => $value ) {
-			$edit_link  = admin_url( '/admin.php?page=papr_custom_roles_sub_menu&current_edit_role=' . $key );
-			$clone_link = admin_url( '/admin.php?page=papr_custom_roles_sub_menu&tab=create_role&clone=' . $key . '_clone' );
+			$nonce = wp_create_nonce('papr_custom_role_submenu');
+			$edit_link  = admin_url( '/admin.php?page=papr_custom_roles_sub_menu&current_edit_role=' . $key. '&_wpnonce=' . $nonce );
+			$clone_link = admin_url( '/admin.php?page=papr_custom_roles_sub_menu&tab=create_role&papr_clone_role=' . $key . '_clone&_wpnonce=' . $nonce );
 			$users_link = admin_url( 'users.php?role=' . $key );
 			$color      = 'f1f6ff';
 			if ( $row_no % 2 == 0 ) {
@@ -563,11 +569,15 @@ class papr_custom_roles {
 	}
 
 	public static function clone_roles_form() {
-		if ( ! array_key_exists( 'clone', $_GET ) && isset( $_GET['tab'] ) ) {
+		if( ! check_admin_referer( "papr_custom_role_submenu" ) ) {
+			return;
+		}
+		if ( ! array_key_exists( 'papr_clone_role', $_GET ) && isset( $_GET['tab'] ) ) {
 			echo '</br>';
 			global $wp_roles;
 			$papr_custom_roles = $wp_roles->roles;
-			$clone_link        = admin_url( '/admin.php?page=papr_custom_roles_sub_menu&tab=create_role&clone=' );
+			$nonce = wp_create_nonce('papr_custom_role_submenu' );
+			$clone_link        = admin_url( '/admin.php?page=papr_custom_roles_sub_menu&tab=create_role&_wpnonce=' . $nonce .'&papr_clone_role=' );
 
 			$papr_custom_roles_first_key = $papr_custom_roles;
 			reset( $papr_custom_roles_first_key );

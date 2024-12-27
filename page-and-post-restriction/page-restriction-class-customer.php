@@ -1,27 +1,14 @@
 <?php
-/** miniOrange Page Restriction plugin allows restriction over users based on their roles and whether they are logged in or not.
- Copyright (C) 2015  miniOrange
 
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
- * @package         miniOrange Page Restriction
- * @license        http://www.gnu.org/copyleft/gpl.html GNU/GPL, see LICENSE.php
- */
 /**
  * This library is miniOrange Authentication Service.
- *
  * Contains Request Calls to Customer service.
+ * 
+ * @package page-and-post-restriction
  */
 
 require_once 'page-restriction-utility.php';
@@ -43,7 +30,6 @@ class Customer_page_restriction {
 
 	function papr_get_customer_key() {
 		$url   = get_option( 'papr_host_name' ) . '/moas/rest/customer/key';
-		$ch    = curl_init( $url );
 		$email = get_option( 'papr_admin_email' );
 
 		$password = get_option( 'papr_admin_password' );
@@ -136,10 +122,13 @@ class Customer_page_restriction {
 		$url          = get_option( 'papr_host_name' ) . '/moas/rest/customer/contact-us';
 		$current_user = wp_get_current_user();
 		$query        = '[WP Page Restriction Free Plugin] ' . $query;
+		if ( isset( $_SERVER['SERVER_NAME'] ) ) {
+			$company = sanitize_text_field( wp_unslash( $_SERVER ['SERVER_NAME'] ) );
+		}
 		$fields       = array(
 			'firstName' => $current_user->user_firstname,
 			'lastName'  => $current_user->user_lastname,
-			'company'   => sanitize_text_field( $_SERVER ['SERVER_NAME'] ),
+			'company'   => $company,
 			'email'     => $email,
 			'ccEmail'   => 'samlsupport@xecurify.com',
 			'phone'     => $phone,
@@ -198,7 +187,6 @@ class Customer_page_restriction {
 		return $response;
 	}
 
-
 	function papr_send_email_alert( $email, $phone, $message ) {
 
 		$url = get_option( 'papr_host_name' ) . '/moas/api/notify/send';
@@ -213,13 +201,14 @@ class Customer_page_restriction {
 		$fromEmail           = 'no-reply@xecurify.com';
 		$subject             = 'Feedback: WP Page Restriction Free Plugin';
 		$site_url            = site_url();
+		$server_name         = isset( $_SERVER['SERVER_NAME'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_NAME'] ) ) : '';
 
 		global $user;
 		$user = wp_get_current_user();
 
-		$query = '[WP Page Restriction Free Plugin]: ' . $message;
+		$query = '[WP Page Restriction Free Plugin]: ' . esc_html( $message );
 
-		$content = '<div >Hello, <br><br>First Name :' . $user->user_firstname . '<br><br>Last  Name :' . $user->user_lastname . '   <br><br>Company :<a href="' . esc_attr( $_SERVER['SERVER_NAME'] ) . '" target="_blank" >' . esc_attr( $_SERVER['SERVER_NAME'] ) . '</a><br><br>Phone Number :' . $phone . '<br><br>Email :<a href="mailto:' . $email . '" target="_blank">' . $email . '</a><br><br>Query :' . $query . '</div>';
+		$content = '<div >Hello, <br><br>First Name :' . esc_html( $user->user_firstname ) . '<br><br>Last  Name :' . esc_html( $user->user_lastname ) . '   <br><br>Company :<a href="' . esc_attr( $server_name ) . '" target="_blank" >' . esc_attr( $server_name ) . '</a><br><br>Phone Number :' . esc_html( $phone ) . '<br><br>Email :<a href="mailto:' . esc_html( $email ) . '" target="_blank">' . esc_html( $email ) . '</a><br><br>Query :' . esc_html( $query ) . '</div>';
 
 		$fields       = array(
 			'customerKey' => $customerKey,

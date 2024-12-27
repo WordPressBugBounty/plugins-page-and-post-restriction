@@ -1,10 +1,11 @@
 <?php
 
 function papr_display_feedback_form() {
-	if ( 'plugins.php' != basename( $_SERVER['PHP_SELF'] ) ) {
+	$papr_filename = isset( $_SERVER['PHP_SELF'] ) ? sanitize_text_field( wp_unslash( $_SERVER['PHP_SELF'] ) ) : '';
+	if ( 'plugins.php' != basename( $papr_filename ) ) {
 		return;
 	}
-	wp_enqueue_style( 'papr_admin_plugin_feedback_style', plugins_url( '/includes/css/papr_feedback_style.min.css', __FILE__ ) );
+	wp_enqueue_style( 'papr_admin_plugin_feedback_style', plugins_url( '/includes/css/papr_feedback_style.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
 	?>
 
 	<div id="papr_feedback_modal" class="mo_papr_modal">

@@ -1,13 +1,17 @@
 <?php
 /**
- * Plugin Name: Page Restriction WordPress (WP) - Protect WP Pages/Post
- * Description: This plugin allows restriction over users based on their roles and whether they are logged in or not.
- * Version: 1.3.6
+ * Plugin Name: Page and Post Restriction
+ * Description: This plugin allows frontend page and post restriction based on user roles and login status.
+ * Version: 1.3.7
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: MIT/Expat
  * License URI: https://docs.miniorange.com/mit-license
  */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+} 
 
 define( 'PAPR_PLUGIN_DIR', dirname( __FILE__ ) );
 define( 'PAPR_CONSTANTS_FILE', '/page-restriction-constants.php' );
@@ -18,7 +22,7 @@ require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-utility.php';
 require_once 'page-restriction-custom-roles-sub-menu.php';
 
-class page_and_post_restriction_add_on {
+class page_and_post_restriction {
 
 	function __construct() {
 		update_option( 'papr_host_name', 'https://login.xecurify.com' );
@@ -34,28 +38,87 @@ class page_and_post_restriction_add_on {
 		add_filter( 'manage_post_posts_columns', array( $this, 'papr_post_add_column' ) );
 		add_action( 'manage_page_posts_custom_column', array( $this, 'papr_page_custom_columns' ), 10, 2 );
 		add_action( 'manage_post_posts_custom_column', array( $this, 'papr_post_custom_columns' ), 10, 2 );
-		add_action( 'quick_edit_custom_box', array( $this, 'papr_display_custom_quickedit_fields' ), 10, 2 );
+		add_action( 'quick_edit_custom_box', array( $this, 'papr_display_custom_quick_edit_fields' ), 10, 2 );
 		add_shortcode( 'restrict_content', array( $this, 'papr_restrict_content' ) );
 		add_action( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'papr_add_plugin_settings' ) );
 		add_action( 'rest_api_init', array( $this, 'papr_restrict_page_post_rest_api' ) );
+		add_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
+		add_filter( 'parse_comment_query', array( $this, 'papr_parse_comment_query' ) );
 	}
 
 	/**
-	 * Restrict the access to Page and Post Rest API.
+	 * Restrict the /pages and /posts rest api endpoints.
+	 *
+	 * @return void
 	 */
 	public function papr_restrict_page_post_rest_api() {
-		$restrict_post_access = get_option( 'papr_restrict_posts_rest_api', 'false' );
-		$restrict_page_access = get_option( 'papr_restrict_pages_rest_api', 'false' );
-		$routes               = $GLOBALS['wp']->query_vars['rest_route'];
-
-		if ( ! is_user_logged_in() && ( ( "true" === $restrict_page_access && 0 === strpos( $routes, '/wp/v2/pages' ) ) || ( "true" === $restrict_post_access && 0 === strpos( $routes, '/wp/v2/posts' ) ) ) ) {
-			$response = new WP_Error(
-				'rest_forbidden',
-				__( 'Sorry, you are not allowed to access this endpoint.' ),
-				array( 'status' => 403 )
-			);
-			wp_send_json( $response, 403 );
+		$routes = ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ? $GLOBALS['wp']->query_vars['rest_route'] : '';
+		if ( ! is_user_logged_in() && ( 0 === strpos( $routes, '/wp/v2/pages' ) || 0 === strpos( $routes, '/wp/v2/posts' ) ) ) {
+			$route_parts      = explode( '/', trim( $routes, '/' ) );
+			$id               = isset( $route_parts[3] ) ? intval( $route_parts[3] ) : 0;
+			$restricted_posts = papr_get_restricted_posts_id();
+			if ( in_array( $id, $restricted_posts, true ) ) {
+				wp_send_json(
+					array(
+						'code'    => 'rest_forbidden',
+						'message' => __( 'Sorry, you are not allowed to access this endpoint.', 'page-and-post-restriction' ),
+						'data'    => array( 'status' => 403 ),
+					),
+					403
+				);
+			}
 		}
+	}
+
+
+	/**
+	 * Filter the posts when the WP_Query object is created.
+	 *
+	 * @param WP_Query $query Object of the WP_Query that needs to be filtered.
+	 * @return void
+	 */
+	public function papr_filter_posts( $query ) {
+		if ( $query->is_search && ! is_admin() && $query->is_main_query() ) {
+			$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+		}
+
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST && isset( $query->query_vars['s'] ) ) {
+			$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+		}
+	}
+
+	/**
+	 * Filter the comment query.
+	 *
+	 * @param WP_Comment_Query $query Query for the comments.
+	 * @return void
+	 */
+	public function papr_parse_comment_query( $query ) {
+		$routes = ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ? $GLOBALS['wp']->query_vars['rest_route'] : '';
+		if ( ! is_user_logged_in() && 0 === strpos( $routes, '/wp/v2/comments' ) ) {
+			$query->query_vars['post__not_in'] = papr_get_restricted_posts_id();
+		}
+	}
+
+	/**
+	 * Get IDs of all the published posts.
+	 *
+	 * @param array|string $type Type of the post for the ID is needed.
+	 * @return array
+	 */
+	private function get_all_published_page_ids( $type ) {
+		remove_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
+		$args     = array(
+			'post_type'      => $type,
+			'post_status'    => 'publish',
+			'fields'         => 'ids',
+			'posts_per_page' => -1,
+		);
+		$query    = new WP_Query( $args );
+		$post_ids = $query->posts;
+		add_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
+		wp_reset_postdata();
+		return $post_ids;
 	}
 
 	function papr_menu() {
@@ -65,7 +128,7 @@ class page_and_post_restriction_add_on {
 	function papr_add_plugin_settings( $links ) {
 		$links = array_merge(
 			array(
-				'<a href="' . esc_url( admin_url( 'admin.php?page=page_restriction' ) ) . '">' . __( 'Settings' ) . '</a>',
+				'<a href="' . esc_url( admin_url( 'admin.php?page=page_restriction' ) ) . '">' . __( 'Settings', 'page-and-post-restriction' ) . '</a>',
 			),
 			$links
 		);
@@ -77,7 +140,7 @@ class page_and_post_restriction_add_on {
 	}
 
 	function papr_deactivate() {
-		wp_redirect( 'plugins.php' );
+		wp_safe_redirect( 'plugins.php' );
 		delete_option( 'papr_admin_email' );
 		delete_option( 'papr_admin_customer_key' );
 		delete_option( 'papr_host_name' );
@@ -114,17 +177,17 @@ class page_and_post_restriction_add_on {
 		if ( $page == 'toplevel_page_page_restriction' || $page == 'page-restriction_page_papr_custom_roles_sub_menu' ) {
 			wp_enqueue_script( 'jquery' );
 			wp_enqueue_script( 'jquery-ui-autocomplete' );
-			wp_enqueue_script( 'papr_admin_settings_phone_script', plugins_url( 'includes/js/phone.js', __FILE__ ) );
-			wp_enqueue_style( 'papr_admin_bootstrap_settings_script', plugins_url( 'includes/js/bootstrap/bootstrap.min.js', __FILE__ ) );
-			wp_enqueue_style( 'papr_admin_bootstrap_settings_script', plugins_url( 'includes/js/bootstrap/popper.min.js', __FILE__ ) );
-			wp_enqueue_style( 'papr_admin_settings_phone_style', plugins_url( 'includes/css/phone.min.css', __FILE__ ) );
-			wp_enqueue_style( 'papr_admin_bootstrap_settings_style', plugins_url( 'includes/css/bootstrap/bootstrap.min.css', __FILE__ ) );
-			wp_enqueue_style( 'papr_admin_settings_style', plugins_url( 'includes/css/papr_settings_style.min.css', __FILE__ ), array(), '1.3.6', 'all' );
-			wp_enqueue_script( 'papr_auto_assign_private_script', plugins_url( 'includes/js/papr_role_assigned.js', __FILE__ ) );
-			wp_enqueue_script( 'papr_roles_show_dropdown_script', plugins_url( 'includes/js/papr_role_dropdown.js', __FILE__ ) );
-			wp_enqueue_style( 'papr_roles_show_dropdown_style', 'https://cdn.jsdelivr.net/gh/harvesthq/chosen@gh-pages/chosen.min.css' );
+			wp_enqueue_script( 'papr_admin_settings_phone_script', plugins_url( 'includes/js/phone.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_style( 'papr_admin_bootstrap_settings_script', plugins_url( 'includes/js/bootstrap/bootstrap.min.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_style( 'papr_admin_bootstrap_settings_script', plugins_url( 'includes/js/bootstrap/popper.min.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_style( 'papr_admin_settings_phone_style', plugins_url( 'includes/css/phone.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_style( 'papr_admin_bootstrap_settings_style', plugins_url( 'includes/css/bootstrap/bootstrap.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_style( 'papr_admin_settings_style', plugins_url( 'includes/css/papr_settings_style.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION, 'all' );
+			wp_enqueue_script( 'papr_auto_assign_private_script', plugins_url( 'includes/js/papr-role-assigned.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_script( 'papr_roles_show_dropdown_script', plugins_url( 'includes/js/papr-role-dropdown.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_style( 'papr_roles_show_dropdown_style', plugins_url('includes/css/papr_role_show_dropdown.min.css',__FILE__ ),array(), Papr_Plugin_Constants::VERSION );
 		} elseif ( $page == 'edit.php' ) {
-			wp_enqueue_script( 'populatequickedit', plugins_url( 'includes/js/page-restriction-quick-edit.js', __FILE__ ), array( 'jquery' ) );
+			wp_enqueue_script( 'populatequickedit', plugins_url( 'includes/js/page-restriction-quick-edit.js', __FILE__ ), array( 'jquery' ), Papr_Plugin_Constants::VERSION );
 		} else {
 			return;
 		}
@@ -164,7 +227,7 @@ class page_and_post_restriction_add_on {
 						$len = count( $allowed_roles[ $post_id ] );
 					}
 					foreach ( $allowed_roles[ $post_id ] as $keys => $allowed_role ) {
-						echo esc_html__( $allowed_role );
+						echo esc_html( $allowed_role );
 						if ( $keys != $len - 1 ) {
 							echo ';';
 						}
@@ -173,9 +236,9 @@ class page_and_post_restriction_add_on {
 				break;
 			case 'Private':
 				if ( isset( $allowed_redirect_pages[ $post_id ] ) ) {
-					echo esc_html__( 'Yes' );
+					echo esc_html__( 'Yes', 'page-and-post-restriction' );
 				} else {
-					echo esc_html__( 'No' );
+					echo esc_html__( 'No', 'page-and-post-restriction' );
 				}
 			default:
 				break;
@@ -197,7 +260,7 @@ class page_and_post_restriction_add_on {
 						$len = count( $allowed_roles[ $post_id ] );
 					}
 					foreach ( $allowed_roles[ $post_id ] as $keys => $allowed_role ) {
-						echo esc_html__( $allowed_role );
+						echo esc_html( $allowed_role );
 						if ( $keys != $len - 1 ) {
 							echo ';';
 						}
@@ -206,9 +269,9 @@ class page_and_post_restriction_add_on {
 				break;
 			case 'Private':
 				if ( isset( $allowed_redirect_post[ $post_id ] ) ) {
-					echo esc_html__( 'Yes' );
+					echo esc_html__( 'Yes', 'page-and-post-restriction' );
 				} else {
-					echo esc_html__( 'No' );
+					echo esc_html__( 'No', 'page-and-post-restriction' );
 				}
 				break;
 			default:
@@ -216,9 +279,9 @@ class page_and_post_restriction_add_on {
 		}
 	}
 
-	function papr_display_custom_quickedit_fields( $column_name, $post_type ) {
+	function papr_display_custom_quick_edit_fields( $column_name, $post_type ) {
 
-		wp_nonce_field( plugin_basename( __FILE__ ), 'book_edit_nonce' );
+		wp_nonce_field( 'papr_quick_edit_nonce', 'papr_quick_edit_option_nonce' );
 
 		if ( $column_name == 'Allowed_Roles' ) {
 			?>
@@ -321,18 +384,18 @@ class page_and_post_restriction_add_on {
 		// Settings when global toggle is all and fe pages/posts has unticked checkbox
 		if ( is_page() && ( $default_login_toggle == 1 ) && empty( $unrestricted_pages[ $page_post_id ] ) ) {
 			$papr_message_text = 'Oops! You are not authorized to access this';
-			wp_die( $papr_message_text );
+			wp_die( esc_html( $papr_message_text ) );
 		}
 
 		if ( is_single() && ( $default_login_toggle_posts == 1 ) && empty( $unrestricted_posts[ $page_post_id ] ) ) {
 			$papr_message_text = 'Oops! You are not authorized to access this';
-			wp_die( $papr_message_text );
+			wp_die( esc_html( $papr_message_text ) );
 		}
 
 		// Added condition for front page restriction
 		if ( ( is_page() && ! empty( $restricted_pages[ $page_post_id ] ) ) || ( is_front_page() && ! empty( $restricted_pages[ get_option( 'page_on_front' ) ] ) ) || ( is_single() && ! empty( $restricted_posts[ $page_post_id ] ) ) ) {
 			$papr_message_text = 'Oops! You are not authorized to access this';
-			wp_die( $papr_message_text );
+			wp_die( esc_html( $papr_message_text ) );
 		}
 	}
 
@@ -401,7 +464,7 @@ class page_and_post_restriction_add_on {
 				return;
 			} elseif ( ( is_single() && ! empty( $allowed_roles_for_posts[ $page_post_id ] ) ) || ( is_front_page() && ! empty( $allowed_roles_for_pages['mo_page_0'] ) ) || ( is_page() && ! empty( $allowed_roles_for_pages[ $page_post_id ] ) ) ) {
 				$papr_message_text = 'Oops! You are not authorized to access this';
-				wp_die( $papr_message_text );
+				wp_die( esc_html( $papr_message_text ) );
 			}
 		}
 	}
@@ -428,11 +491,9 @@ class page_and_post_restriction_add_on {
 		if ( is_object( $post ) && property_exists( $post, 'post_type' ) ) {
 			$type = $post->post_type;
 		}
-
 		if ( $type == 'page' || $type == 'post' ) {
-			wp_nonce_field( 'my_meta_box_nonce', 'meta_box_nonce' );
+			wp_nonce_field( 'papr_meta_box_nonce', 'papr_meta_box_option_nonce' );
 		}
-
 		global $wp_roles;
 		$wp_name_roles = ( $wp_roles->role_names );
 		asort( $wp_name_roles );
@@ -495,7 +556,7 @@ class page_and_post_restriction_add_on {
 			<?php
 			echo '</br></br>';
 		}
-			esc_html_e( 'Limit access to Logged in users.', 'mo-wpum' );
+			esc_html_e( 'Limit access to Logged in users.', 'page-and-post-restriction' );
 		?>
 		</p>
 		<div class="page-restrict-loggedin-user-div">
@@ -514,14 +575,14 @@ class page_and_post_restriction_add_on {
 					}
 				}
 				?>
-				<input type="checkbox" name="restrict_page_access_loggedin_user" <?php echo esc_attr( $require_login ); ?> value="true" <?php echo ( $disabled ); ?> />
+				<input type="checkbox" name="restrict_page_access_loggedin_user" <?php echo esc_attr( $require_login ); ?> value="true" <?php echo ( esc_attr( $disabled ) ); ?> />
 				Require Login
 			</ul>
 		</div>
 
 		<hr>
 		<p>
-			<?php esc_html_e( "Limit access to this post's content to users of the selected roles.", 'mo-wpum' ); ?>
+			<?php esc_html_e( 'Limit access to this post\'s content to users of the selected roles.', 'page-and-post-restriction' ); ?>
 		</p>
 
 		<div class="role-list-wrap">
@@ -544,7 +605,12 @@ class page_and_post_restriction_add_on {
 
 	/* Function to save the meta box details during creation/editing */
 	static function papr_save_meta_box_info( $post_id, $post, $update ) {
-		if ( ! isset( $_POST['papr_metabox'] ) && ! isset( $_POST['book_edit_nonce'] ) ) {
+		if ( isset( $_POST['papr_meta_box_option_nonce'] ) || isset( $_POST['papr_quick_edit_option_nonce'] ) ) {	
+			if( ! check_admin_referer( 'papr_meta_box_nonce','papr_meta_box_option_nonce' ) && ! check_admin_referer( 'papr_quick_edit_nonce','papr_quick_edit_option_nonce' ) ) {
+				return;
+			}
+		}
+		else {
 			return;
 		}
 
@@ -583,14 +649,14 @@ class page_and_post_restriction_add_on {
 
 		if ( isset( $_POST['papr_access_role'] ) ) {
 			array_push( $restrictedposts, $post_id );
-			$new_roles = $_POST['papr_access_role'];
+			$new_roles =  papr_get_sanitized_post_option('sanitize_text_field','papr_access_role' );
 			foreach ( $new_roles as $value ) {
 				$value = sanitize_text_field( $value );
 			}
 			$allowed_roles[ $post_id ] = $new_roles;
 		} elseif ( isset( $_POST['Allowed_Roles'] ) ) {
 			array_push( $restrictedposts, $post_id );
-			$new_roles                 = sanitize_text_field( $_POST['Allowed_Roles'] );
+			$new_roles                 = sanitize_text_field( wp_unslash( $_POST['Allowed_Roles'] ) );
 			$allowed_roles[ $post_id ] = explode( ';', $new_roles );
 		} else {
 			$restrictedpostsarray = $restrictedposts;
@@ -701,5 +767,5 @@ class page_and_post_restriction_add_on {
 		}
 	}
 }
-new page_and_post_restriction_add_on();
+new page_and_post_restriction();
 ?>

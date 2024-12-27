@@ -1,15 +1,21 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-utility.php';
 
 function papr_custom_roles_sub_menu() {
 		 global $wp_roles;
 		$papr_custom_roles = $wp_roles->roles;
-
+		if ( isset( $_GET['_wpnonce'] ) && ! check_admin_referer("papr_custom_role_submenu") ) {
+			return;
+		}
 		$current_tab = '';
 	if ( array_key_exists( 'tab', $_GET ) ) {
-		$current_tab = sanitize_text_field( $_GET['tab'] );
+		$current_tab = sanitize_text_field( wp_unslash( $_GET['tab'] ) );
 	} ?>
 		<?php papr_custom_roles_nav_tab( $current_tab ); ?>
 		<div class="papr-bg-main papr-margin-left">
@@ -19,8 +25,8 @@ function papr_custom_roles_sub_menu() {
 						papr_message_success_fail();
 					switch ( $current_tab ) {
 						case 'create_role':
-							if ( array_key_exists( 'clone', $_GET ) ) {
-								$current_edit_role = sanitize_text_field( $_GET['clone'] );
+							if ( array_key_exists( 'papr_clone_role', $_GET ) ) {
+								$current_edit_role = sanitize_text_field( wp_unslash( $_GET['papr_clone_role'] ) );
 								papr_custom_roles::create_clone_roles( $current_edit_role, $papr_custom_roles );
 							} else {
 								papr_custom_roles::create_edit_roles( '', $papr_custom_roles );
@@ -29,7 +35,7 @@ function papr_custom_roles_sub_menu() {
 
 						default:
 							if ( array_key_exists( 'current_edit_role', $_GET ) ) {
-								$current_edit_role = sanitize_text_field( $_GET['current_edit_role'] );
+								$current_edit_role = sanitize_text_field( wp_unslash( $_GET['current_edit_role'] ) );
 								if ( empty( $papr_custom_roles[ $current_edit_role ] ) ) {
 									papr_custom_roles::edit_delete_roles();
 								} else {
@@ -72,9 +78,10 @@ function papr_custom_roles_nav_tab( $current_tab ) {
 			</div>
 		</div>
 		<div class="nav-tab-wrapper papr-bg-main" id="nav-role">
-			<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, '' ) ); ?>" href="admin.php?page=papr_custom_roles_sub_menu">Roles
+			<?php $nonce = wp_create_nonce('papr_custom_role_submenu'); ?>
+			<a class="nav-tab papr-nav-tab <?php echo esc_attr( papr_set_active_tab( $current_tab, '' ) ); ?>" href="admin.php?page=papr_custom_roles_sub_menu&_wpnonce=<?php echo esc_attr( $nonce );  ?>">Roles
 			</a>
-			<a class="nav-tab papr-nav-tab ms-3 <?php echo esc_attr( papr_set_active_tab( $current_tab, 'create_role' ) ); ?>" href="admin.php?page=papr_custom_roles_sub_menu&tab=create_role"> Add New Role
+			<a class="nav-tab papr-nav-tab ms-3 <?php echo esc_attr( papr_set_active_tab( $current_tab, 'create_role' ) ); ?>" href="admin.php?page=papr_custom_roles_sub_menu&tab=create_role&_wpnonce=<?php echo esc_attr( $nonce );  ?>"> Add New Role
 			</a>
 		</div>
 	</div>

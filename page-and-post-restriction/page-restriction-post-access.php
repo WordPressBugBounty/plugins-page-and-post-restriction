@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-page-access.php';
 require_once 'page-restriction-utility.php';
@@ -21,8 +25,10 @@ function papr_post_access() {
 	$post_type                     = $post_type != '' ? $post_type : 'post';
 
 	$mo_post_search_value = '';
-	if ( array_key_exists( 'search', $_GET ) ) {
-		$mo_post_search_value = sanitize_text_field( $_GET['search'] );
+	if ( isset( $_GET['search'] ) && isset( $_GET['_wpnonces'] ) ) {
+			$nonce = check_admin_referer( 'papr_search_post', '_wpnonces' );
+			if ( $nonce ) 
+			$mo_post_search_value = sanitize_text_field( wp_unslash( $_GET['search'] ) );
 	}
 
 	$post_array_type = get_post_types();
@@ -305,9 +311,6 @@ function papr_post_toggle_all_pages() {
 				</div>
 				<input type="hidden" name="option" value="papr_access_for_only_loggedin_posts">
 			</form>
-			<?php
-				papr_show_rest_api_toggle( "posts" );
-			?>
 		</div>
 	<?php
 }

@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 require_once 'page-restriction-menu-settings.php';
 
 function papr_dropdown( $results_per_page, $type, $post_type = '' ) {
@@ -9,7 +13,7 @@ function papr_dropdown( $results_per_page, $type, $post_type = '' ) {
 	}
 	?>
 
-	<form id="<?php esc_attr_e( $dropdown_type ); ?>" name="<?php esc_attr_e( $dropdown_type ); ?>" method="post" action="">
+	<form id="<?php esc_attr( $dropdown_type ); ?>" name="<?php esc_attr( $dropdown_type ); ?>" method="post" action="">
 		<input type="hidden" name="option" value="<?php echo esc_attr( $dropdown_type ); ?>">
 		<?php wp_nonce_field( $dropdown_type ); ?>
 		<div class="row align-items-center">
@@ -71,13 +75,12 @@ function papr_post_type_dropdown( $post_type ) {
 }
 
 function papr_search_box( $type, $mo_search_value ) {
-	$temp = 'papr_search_' . $type;
+	$option = 'papr_search_' . $type;
 	?>
 	
-	<form id="<?php echo esc_attr( $temp ); ?>" name="<?php echo esc_attr( $temp ); ?>" method="post" action="">
-	<input type="hidden" name="option" value="<?php echo esc_attr( $temp ); ?>">
+	<form id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" method="post" action="">
+	<input type="hidden" name="option" value="<?php echo esc_attr( $option ); ?>">
 	<?php
-	wp_nonce_field( $temp );
 		$textbox_id = 'mo_' . $type . '_search';
 	?>
 	<div id="search_page_post">
@@ -99,15 +102,18 @@ function papr_search_box( $type, $mo_search_value ) {
 			</div>
 			</form>
 			<div style="margin-left:1rem;margin-bottom:0.4rem">
-				<button type="button" id = "<?php echo esc_attr( $temp ); ?>_button" class="papr-btn-cstm rounded"  style="padding:0.17rem 1.5rem !important"
+				<button type="button" id = "<?php echo esc_attr( $option ); ?>_button" class="papr-btn-cstm rounded"  style="padding:0.17rem 1.5rem !important"
 					>Search
 				</button>
 			</div>
 		</div>
 	</div>
 	</br>
-
+	<?php 
+	$nonce = wp_create_nonce( $option );
+	 ?>
 	<script>
+		var nonce = "<?php echo esc_attr( $nonce ); ?>";
 		jQuery(document).ready(function() {
 			var page_ele = document.getElementById("mo_page_search");
 			if(page_ele){
@@ -146,6 +152,7 @@ function papr_search_box( $type, $mo_search_value ) {
 			if(search != ''){
 				link = 'admin.php?page=page_restriction&search='.concat(search);
 			}
+			link = link + '&_wpnonces=' + nonce;
 			window.open(link, "_self");
 		});
 
@@ -155,6 +162,7 @@ function papr_search_box( $type, $mo_search_value ) {
 			if(search != ''){
 				link = 'admin.php?page=page_restriction&tab=post_access&search='.concat(search);
 			}
+			link = link + '&_wpnonces=' + nonce;
 			window.open(link, "_self");
 		});
 	</script>
@@ -169,7 +177,9 @@ function papr_pagination_button( $number_of_pages_in_pagination, $total_pages, $
 	$prev_page  = $link . $current_page_prev;
 	$last_page  = $link . $number_of_pages_in_pagination;
 	$first_page = $link . '1';
-
+	if( isset( $_GET['_wpnonce'] ) && isset( $_GET['page'] ) && $_GET['page'] === 'page_restriction' && ! check_admin_referer('papr_menu_setting_nonce' ) ) {
+		return;
+	}
 	if ( ! array_key_exists( 'tab', $_GET ) ) {
 		if ( array_key_exists( 'page', $_GET ) != 'papr_custom_roles_sub_menu' ) {
 			$total_pages = $total_pages + 1;            // for home page
@@ -191,11 +201,11 @@ function papr_pagination_button( $number_of_pages_in_pagination, $total_pages, $
 			}
 			?>
 
-			<a class="first-page rounded papr-pagination-btn" <?php echo $first_page_link; ?>>
+			<a class="first-page rounded papr-pagination-btn" <?php echo esc_url( $first_page_link ); ?>>
 				<span class="screen-reader-text">First page</span>
 				<span aria-hidden="true">«</span>
 			</a>
-			<a class="prev-page rounded papr-pagination-btn" <?php echo $prev_page_link; ?>>
+			<a class="prev-page rounded papr-pagination-btn" <?php echo esc_url( $prev_page_link ); ?>>
 				<span class="screen-reader-text">Previous page</span>
 				<span aria-hidden="true">‹</span>
 			</a>
@@ -227,11 +237,11 @@ function papr_pagination_button( $number_of_pages_in_pagination, $total_pages, $
 			}
 			?>
 
-			<a class="next-page rounded papr-pagination-btn" <?php echo $next_page_link; ?>>
+			<a class="next-page rounded papr-pagination-btn" <?php echo esc_url( $next_page_link ); ?>>
 				<span class="screen-reader-text">Next page</span>
 				<span aria-hidden="true">›</span>
 			</a>
-			<a class="last-page rounded papr-pagination-btn" <?php echo $last_page_link; ?>>
+			<a class="last-page rounded papr-pagination-btn" <?php echo esc_url( $last_page_link ); ?>>
 				<span class="screen-reader-text">Last page</span>
 				<span aria-hidden="true">»</span>
 			</a>
@@ -239,51 +249,71 @@ function papr_pagination_button( $number_of_pages_in_pagination, $total_pages, $
 	</div>
 	<?php
 }
+function papr_get_page_post_count( $papr_search_value, $type ) {
+    if ( $papr_search_value == '' ) {
+        if ( $type == 'page' ) {
+            $all_parent_pages = array(
+                'post_parent'   => 0,
+                'posts_per_page' => -1,
+                'post_type'     => $type,
+                'fields'         => 'ids'
+            );
+            $total_pages_post = get_posts( $all_parent_pages );
+        } else {
+            $total_pages_post_count = wp_count_posts( $type )->publish;
+            return $total_pages_post_count;
+        }
+    } else {
+        $cache_key = 'papr_page_post_search_' . md5( $papr_search_value . $type );
+        $total_pages_post = wp_cache_get( $cache_key, 'papr_cache_page_count' );
+        
+        if ( false === $total_pages_post ) {
+            $args = array(
+                'post_type'      => $type,
+                'posts_per_page' => -1,
+                's'              => $papr_search_value,
+            );
+            $query = new WP_Query( $args );
+            $total_pages_post = $query->posts;
+            wp_cache_set( $cache_key, $total_pages_post, 'papr_cache_page_count', 3600 );
+        }
+    }
 
-function papr_get_page_post_count( $mo_page_post_search_value, $type ) {
-	if ( $mo_page_post_search_value == '' ) {
-		if ( $type == 'page' ) {
-			$all_parent_pages = array(
-				'post_parent' => 0,
-				'numberposts' => -1,
-				'post_type'   => $type,
-			);
-			$total_pages_post = get_posts( $all_parent_pages );
-		} else {
-			$total_pages_post_count = wp_count_posts( $type )->publish; // @TODO: Find an alternative
-			return $total_pages_post_count;
-		}
-	} else {
-		global $wpdb;
-		$total_pages_post = $wpdb->get_results( "SELECT * FROM wp_posts WHERE (post_title LIKE '%{$mo_page_post_search_value}%') AND post_type='$type'" );
-	}
-
-	$total_pages_post_count = count( $total_pages_post );
-	return $total_pages_post_count;
+    $total_pages_post_count = count( $total_pages_post );
+    return $total_pages_post_count;
 }
 
-function papr_get_paginated_pages_post( $mo_page_post_search_value, $results_per_page, $current_page, $type ) {
-	if ( $mo_page_post_search_value == '' ) {
-		$required_pages_post = array(
-			'post_parent'    => 0,
-			'posts_per_page' => $results_per_page,
-			'post_type'      => $type,
-			'paged'          => $current_page,
-			'orderby'        => 'publish_date',
-			'order'          => 'ASC',
-		);
-		$pagination          = get_posts( $required_pages_post );
-	} else {
-		global $wpdb;
-		$skip       = ( $current_page - 1 ) * $results_per_page;
-		$pagination = $wpdb->get_results(
-			" SELECT * FROM wp_posts 
-                        WHERE post_title LIKE '%$mo_page_post_search_value%' AND post_type='$type' AND post_status='publish' 
-                        ORDER BY post_title 
-                        limit $results_per_page OFFSET $skip "
-		);
-	}
-	return $pagination;
+
+function papr_get_paginated_pages_post( $papr_search_value, $results_per_page, $current_page, $type ) {
+    if ( $papr_search_value == '' ) {
+        $required_pages_post = array(
+            'post_parent'    => 0,
+            'posts_per_page' => $results_per_page,
+            'post_type'      => $type,
+            'paged'          => $current_page,
+            'orderby'        => 'publish_date',
+            'order'          => 'ASC'
+        );
+        $pagination = get_posts( $required_pages_post );
+    } else {
+        $cache_key = 'papr_page_post_search_paginated_' . md5( $papr_search_value . $type . $current_page );
+        $pagination = wp_cache_get( $cache_key, 'papr_cache_paginated_page_post' );
+        if ( false === $pagination ) {
+            $args = array(
+                'post_type'       => $type,
+                'posts_per_page'  => $results_per_page,
+                'paged'           => $current_page,
+                's'               => $papr_search_value,
+                'post_status'     => 'publish',
+                'orderby'         => 'title',
+                'order'           => 'ASC'
+            );
+            $query = new WP_Query( $args );
+            $pagination = $query->posts;
+            wp_cache_set( $cache_key, $pagination, 'papr_cache_paginated_page_post', 3600 );
+        }
+    }
+    return $pagination;
 }
 
 function papr_display_head_foot_of_table( $type ) {
@@ -319,13 +349,14 @@ function papr_display_head_foot_of_table( $type ) {
 
 function papr_get_current_page( $number_of_pages_in_pagination ) {
 	$current_page = 1;
+	// phpcs:ignore
 	if ( isset( $_REQUEST['curr'] ) && ( $_REQUEST['curr'] > 1 ) ) {
-		$current_page = $_REQUEST['curr'];
+		// phpcs:ignore 
+		$current_page = sanitize_text_field( wp_unslash( $_REQUEST['curr'] ) );
 		if ( $current_page > $number_of_pages_in_pagination ) {
 			$current_page = $number_of_pages_in_pagination;
 		}
 	}
-
 	return $current_page;
 }
 
@@ -563,9 +594,6 @@ function papr_toggle_all_pages() {
 				</div>
 			</div>
 		</form>
-		<?php
-			papr_show_rest_api_toggle( "pages" );
-		?>
 	</div>
 	<?php
 }
@@ -617,8 +645,27 @@ function papr_add_query_arg( $url ) {
 	return $url;
 }
 
-function papr_check_option_admin_referer( $option_name ) {
-	return ( isset( $_POST['option'] ) and $_POST['option'] == $option_name and check_admin_referer( $option_name ) );
+function papr_check_form_option( $option_name ) {
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- The nonce verification is done where this function is called.
+	return ( isset( $_POST['option'] ) && $_POST['option'] === $option_name );
+}
+
+function papr_get_sanitized_post_option( $callable, $option ) {
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- The nonce verification is done where this function is called.
+	if( ! empty ($_POST[$option] ) ) {
+		// phpcs:ignore WordPress.Security -- The nonce verification is done where this function is called and sanitization is done later in the function.
+		$post_value = wp_unslash( $_POST[$option] );
+		if( ! is_array( $post_value ) ) {
+			if (is_callable($callable)) {
+				return call_user_func($callable, $post_value);
+			} else {
+				return false;
+			}
+		} else {
+			return array_map( $callable, $post_value );
+		}
+	}
+	return '';
 }
 
 function papr_message_success_fail() {
@@ -633,8 +680,8 @@ function papr_message_success_fail() {
 	$papr_message = get_option( 'papr_message' );
 	if ( $papr_message != '' ) {
 		echo '
-            <div class="rounded bg-white papr-shadow p-2 pt-1 mt-4 ms-4" style="border-left-style: solid;' . $style . '">
-                ' . $papr_message . '
+            <div class="rounded bg-white papr-shadow p-2 pt-1 mt-4 ms-4" style="border-left-style: solid;' . esc_attr( $style ) . '">
+                ' . esc_html( $papr_message ) . '
             </div>';
 	}
 	delete_option( 'papr_message' );
@@ -642,48 +689,17 @@ function papr_message_success_fail() {
 }
 
 /**
- * Displays the Pages/Posts Rest API toggles.
- * 
- * @param String $option
+ * Return the IDs of the restricted posts.
+ *
+ * @return array
  */
-function papr_show_rest_api_toggle($option)
-{
-    if ( "pages" === $option ) {
-        $option_name = 'papr_restrict_pages_rest_api';
-    } else if ( "posts" === $option ) {
-        $option_name = 'papr_restrict_posts_rest_api';
-    }
-    ?>
-	<form id="<?php echo $option_name . '_form'; ?>" name="<?php echo $option_name . '_form'; ?>" method="post" class="mt-4">
-		<?php wp_nonce_field("$option_name"); ?>
-		<div class="row">
-			<div class="col-md-6">
-				<h6>Make the <?php if ( "pages" === $option ) echo "Pages";
-								elseif ( "posts" === $option ) echo "Posts"; ?> Rest API Private
-					<div class="papr-info-global ml-2">
-						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-info-circle-fill" viewBox="0 0 16 16">
-							<path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z" />
-						</svg>
-						<p class="papr-info-text-global">
-							Enable this toggle to <b>Restrict</b> access to /<?php echo $option; ?> Rest API.
-						</p>
-					</div>
-				</h6>
-			</div>
-			<div class="col-md-4">
-				<input type="hidden" name="option" value="<?php echo $option_name; ?>">
-				<label class="switch">
-					<input type="checkbox" id="<?php echo $option; ?>_restrict" name="<?php echo $option_name; ?>" 
-					<?php
-					if ( "true" === get_option("$option_name") )
-						echo ' checked ';
-					?> onChange="document.getElementById('<?php echo $option_name.'_form'; ?>').submit()">
-					<span class="slider round"></span>
-				</label>
-			</div>
-		</div>
-	</form>
-    <?php
+function papr_get_restricted_posts_id() {
+	$restricted_pages = get_option( 'papr_allowed_redirect_for_pages' );
+	$restricted_posts = get_option( 'papr_allowed_redirect_for_posts' );
+	$restricted_pages = is_array( $restricted_pages ) ? array_keys( $restricted_pages ) : array();
+	$restricted_posts = is_array( $restricted_posts ) ? array_keys( $restricted_posts ) : array();
+	return array_merge( $restricted_pages, $restricted_posts );
 }
+
 
 ?>

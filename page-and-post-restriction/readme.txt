@@ -2,12 +2,12 @@
 Contributors: miniOrange
 Donate link: https://miniorange.com
 Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction, Restrict Access
-Tested up to: 6.7
+Tested up to: 6.8
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.3.7
-License: MIT/Expat
-License URI: https://docs.miniorange.com/mit-license
+Stable tag: 1.3.8
+License: Expat
+License URI: https://plugins.miniorange.com/mit-license
 
 Restrict content access for WordPress (WP) | Restrict pages/posts in WP based on user roles and login status to protect content
 
@@ -109,12 +109,19 @@ If you are still nervous about your website security or how the plugin would wor
 
 == Screenshots ==
 
-1. Restrict Access to Posts/Pages based on User Roles.
-2. Restrict Access to only Logged in Users.
-3. Restrict Access to Meta-box based on User Roles.
+1. Apply global restrictions to all pages
+2. Restrict page access based on user roles and logged-in status
+3. Apply global restrictions to all posts
+4. Restrict post access based on user roles and logged-in status
+5. Allow only logged-in users to view specific content on a page
+6. Edit or clone the capabilities of existing roles
+7. Create new roles by defining custom capabilities
 
 
 == Changelog ==
+
+= 1.3.8 =
+* Compatibility with WordPress 6.8
 
 = 1.3.7 =
 * Adding Restriction on WP Pages, Posts, Comments, and Search REST API
@@ -209,6 +216,9 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.3.8 =
+* Compatibility with WordPress 6.8
 
 = 1.3.7 =
 * Adding Restriction on WP Pages, Posts, Comments, and Search REST API

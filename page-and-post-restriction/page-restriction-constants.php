@@ -17,5 +17,5 @@ class Papr_Plugin_Links {
 }
 
 class Papr_Plugin_Constants {
-	const VERSION = '1.3.7';
+	const VERSION = '1.3.8';
 }

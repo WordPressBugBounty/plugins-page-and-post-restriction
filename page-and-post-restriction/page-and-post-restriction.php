@@ -2,11 +2,11 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.3.7
+ * Version: 1.3.8
  * Author: miniOrange
  * Author URI: https://miniorange.com
- * License: MIT/Expat
- * License URI: https://docs.miniorange.com/mit-license
+ * License: Expat
+ * License URI: https://plugins.miniorange.com/mit-license
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

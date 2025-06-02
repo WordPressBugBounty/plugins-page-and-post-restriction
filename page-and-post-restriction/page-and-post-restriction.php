@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.3.8
+ * Version: 1.3.9
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -79,14 +79,54 @@ class page_and_post_restriction {
 	 */
 	public function papr_filter_posts( $query ) {
 		if ( $query->is_search && ! is_admin() && $query->is_main_query() ) {
-			$query->set( 'post__not_in', papr_get_restricted_posts_id() );
-		}
+			
+			if ( ! is_user_logged_in() ) {
+				$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+			} else {
+				$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
+				$allowed_roles_pages = get_option( 'papr_allowed_roles_for_pages', array() );
+				$current_user  = wp_get_current_user();
+				$user_roles = $current_user->roles;
+				$not_accessible_posts = array();
 
+				if ( is_array( $allowed_roles_posts ) ) {
+					foreach ( $allowed_roles_posts as $post_id => $roles ) {
+						if ( ! array_intersect( $roles, $user_roles ) ) {
+							$not_accessible_posts[] = $post_id;
+						}
+					}
+				}
+
+				if ( is_array( $allowed_roles_pages ) ) {
+					foreach ( $allowed_roles_pages	 as $post_id => $roles ) {
+						if ( ! array_intersect( $roles, $user_roles ) ) {
+							$not_accessible_posts[] = $post_id;
+						}
+					}
+				}
+				$query->set( 'post__not_in', array_merge( $not_accessible_posts ) );
+			}
+		}
+	
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST && isset( $query->query_vars['s'] ) ) {
-			$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+			if ( ! is_user_logged_in() ) {
+				$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+			} else {
+				$allowed_roles = get_option( 'papr_allowed_roles_for_posts', array() );
+				$current_user = wp_get_current_user();
+				$user_roles = $current_user->roles;
+				$not_accessible_posts = array();
+				if ( is_array( $allowed_roles ) ) {
+					foreach ( $allowed_roles as $post_id => $roles ) {
+						if ( ! array_intersect( $roles, $user_roles ) ) {
+							$not_accessible_posts[] = $post_id;
+						}
+					}
+				}
+				$query->set( 'post__not_in', array_merge( $not_accessible_posts ) );
+			}
 		}
 	}
-
 	/**
 	 * Filter the comment query.
 	 *
@@ -392,8 +432,7 @@ class page_and_post_restriction {
 			wp_die( esc_html( $papr_message_text ) );
 		}
 
-		// Added condition for front page restriction
-		if ( ( is_page() && ! empty( $restricted_pages[ $page_post_id ] ) ) || ( is_front_page() && ! empty( $restricted_pages[ get_option( 'page_on_front' ) ] ) ) || ( is_single() && ! empty( $restricted_posts[ $page_post_id ] ) ) ) {
+		if ( ( is_page() && ! empty( $restricted_pages[ $page_post_id ] ) ) || ( is_front_page() && ( ! empty( $restricted_pages[ get_option( 'page_on_front' ) ] ) || $default_login_toggle == 1 ) ) || ( is_single() && ! empty( $restricted_posts[ $page_post_id ] ) ) ) {
 			$papr_message_text = 'Oops! You are not authorized to access this';
 			wp_die( esc_html( $papr_message_text ) );
 		}
@@ -605,14 +644,12 @@ class page_and_post_restriction {
 
 	/* Function to save the meta box details during creation/editing */
 	static function papr_save_meta_box_info( $post_id, $post, $update ) {
-		if ( isset( $_POST['papr_meta_box_option_nonce'] ) || isset( $_POST['papr_quick_edit_option_nonce'] ) ) {	
-			if( ! check_admin_referer( 'papr_meta_box_nonce','papr_meta_box_option_nonce' ) && ! check_admin_referer( 'papr_quick_edit_nonce','papr_quick_edit_option_nonce' ) ) {
-				return;
-			}
-		}
-		else {
+		if ( ( isset( $_POST['papr_meta_box_option_nonce'] ) && ! check_admin_referer( 'papr_meta_box_nonce', 'papr_meta_box_option_nonce' ) ) ||
+			 ( isset( $_POST['papr_quick_edit_option_nonce'] ) && ! check_admin_referer( 'papr_quick_edit_nonce', 'papr_quick_edit_option_nonce' ) ) ||
+			 ( ! isset( $_POST['papr_meta_box_option_nonce'] ) && ! isset( $_POST['papr_quick_edit_option_nonce'] ) )
+			) {
 			return;
-		}
+			}
 
 		$type = get_post_type( $post );
 
@@ -654,7 +691,7 @@ class page_and_post_restriction {
 				$value = sanitize_text_field( $value );
 			}
 			$allowed_roles[ $post_id ] = $new_roles;
-		} elseif ( isset( $_POST['Allowed_Roles'] ) ) {
+		} elseif ( !empty( $_POST['Allowed_Roles'] ) ) {
 			array_push( $restrictedposts, $post_id );
 			$new_roles                 = sanitize_text_field( wp_unslash( $_POST['Allowed_Roles'] ) );
 			$allowed_roles[ $post_id ] = explode( ';', $new_roles );
@@ -668,7 +705,7 @@ class page_and_post_restriction {
 			}
 			$restrictedposts = $restrictedpostsarray;
 		}
-		if ( isset( $_POST['restrict_page_access_loggedin_user'] ) || isset( $_POST['Private'] ) ) {
+		if ( isset( $_POST['restrict_page_access_loggedin_user'] ) || !empty( $_POST['Private'] ) ) {
 			$allowed_redirect_pages[ $post_id ] = true;
 			unset( $unrestricted_pages[ $post_id ] );
 		} else {

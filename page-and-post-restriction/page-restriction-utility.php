@@ -13,7 +13,7 @@ function papr_dropdown( $results_per_page, $type, $post_type = '' ) {
 	}
 	?>
 
-	<form id="<?php esc_attr( $dropdown_type ); ?>" name="<?php esc_attr( $dropdown_type ); ?>" method="post" action="">
+	<form id="<?php esc_attr_e( $dropdown_type ); ?>" name="<?php esc_attr_e( $dropdown_type ); ?>" method="post" action="">
 		<input type="hidden" name="option" value="<?php echo esc_attr( $dropdown_type ); ?>">
 		<?php wp_nonce_field( $dropdown_type ); ?>
 		<div class="row align-items-center">
@@ -554,7 +554,7 @@ function papr_toggle_all_pages() {
 					<label class="switch">
 						<input type="checkbox" id="logged_in" name="papr_access_for_only_loggedin"
 						<?php
-						if ( get_site_option( 'papr_access_for_only_loggedin' ) == 1 ) {
+						if ( get_option( 'papr_access_for_only_loggedin' ) == 1 ) {
 							echo ' checked ';
 						}
 						?>
@@ -584,7 +584,7 @@ function papr_toggle_all_pages() {
 					<label class="switch">
 						<input type="checkbox" id="default_role_toggle" name="papr_default_role_parent_page_toggle"
 						<?php
-						if ( get_site_option( 'papr_default_role_parent_page_toggle' ) == 1 ) {
+						if ( get_option( 'papr_default_role_parent_page_toggle' ) == 1 ) {
 							echo 'checked ';
 						}
 						?>
@@ -628,7 +628,9 @@ function papr_display_roles( $mo_type_roles_value ) {
 		$role_exist = -1;
 		if ( is_array( $mo_type_roles_value ) ) {
 			$role_exist = array_search( $key, $mo_type_roles_value );
-			$role_exist++; // to make work in php7.4
+			if ( $role_exist ) {
+				$role_exist++; // to make work in php7.4.
+			}
 		}
 		echo '<option value="' . esc_attr( $key ) . '"';
 		if ( $role_exist >= 0 && $role_exist != '' ) {

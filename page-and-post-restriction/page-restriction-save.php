@@ -27,6 +27,18 @@ function papr_save_setting() {
 			return;
 		}
 
+		if ( empty( $custom_role_name ) ) {
+			update_option( 'papr_message', 'Please enter a valid role.' );
+			update_option( 'papr_message_success_fail', 'error' );
+			return;
+		}
+
+		if ( preg_match( '/[^a-zA-Z0-9\-_]/', $custom_role_name ) ) {
+			update_option( 'papr_message', 'Only letters, numbers, hyphens, and underscores are allowed in the role name.' );
+			update_option( 'papr_message_success_fail', 'error' );
+			return;
+		}
+
 		$role_capability = array();
 		foreach ( $_POST as $key => $value ) {
 			$role_capability[ $key ] = 1;
@@ -49,6 +61,12 @@ function papr_save_setting() {
 		$custom_role_display_name = $custom_role_name;
 		$custom_role_name         = strtolower( str_replace( ' ', '_', $custom_role_name ) );
 		unset( $_POST['custom_role_name'] );
+
+		if ( preg_match( '/[^a-zA-Z0-9\-_]/', $custom_role_name ) ) {
+			update_option( 'papr_message', 'Only letters, numbers, hyphens, and underscores are allowed in the role name.' );
+			update_option( 'papr_message_success_fail', 'error' );
+			return;
+		}
 
 		$role_capability = array();
 		foreach ( $_POST as $key => $value ) {

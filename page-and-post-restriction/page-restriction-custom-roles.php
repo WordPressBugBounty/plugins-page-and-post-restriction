@@ -160,15 +160,15 @@ class papr_custom_roles {
 			}
 
 			function validate_role_name(){
-				var format = /[!@#$%^&*()+\-=\[\]{};':"\\|,.<>\/?]+/;
+				var format = /[^a-zA-Z0-9-_]/;
 				var role_name = document.getElementById('custom_role_name').value;
 				let index = roles_array.indexOf(role_name);
 				if(index != -1) {
-					document.getElementById("role_name_error").innerHTML = "This role name already exist";
+					document.getElementById("role_name_error").innerHTML = "This role name already exists";
 					document.getElementsByClassName("role_submit_button")[0].disabled = true;
 					document.getElementsByClassName("role_submit_button")[1].disabled = true;
 				} else if(format.test(role_name)){
-					document.getElementById("role_name_error").innerHTML = "Special characters in the role name not allowed.";
+					document.getElementById("role_name_error").innerHTML = "Only letters, numbers, hyphens, and underscores are allowed.";
 					document.getElementsByClassName("role_submit_button")[0].disabled = true;
 					document.getElementsByClassName("role_submit_button")[1].disabled = true;
 				} else {

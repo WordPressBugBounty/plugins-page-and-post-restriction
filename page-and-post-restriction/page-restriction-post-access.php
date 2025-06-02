@@ -300,7 +300,7 @@ function papr_post_toggle_all_pages() {
 						<label class="switch">
 							<input type="checkbox" id="logged_in_post" name="papr_access_for_only_loggedin_posts" onChange="document.getElementById('papr_access_for_only_loggedin_posts').submit()"
 							<?php
-							if ( get_site_option( 'papr_access_for_only_loggedin_posts' ) == 1 ) {
+							if ( get_option( 'papr_access_for_only_loggedin_posts' ) == 1 ) {
 								echo ' checked ';
 							}
 							?>

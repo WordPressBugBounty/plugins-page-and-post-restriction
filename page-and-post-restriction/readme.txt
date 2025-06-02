@@ -5,7 +5,7 @@ Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction,
 Tested up to: 6.8
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.3.8
+Stable tag: 1.3.9
 License: Expat
 License URI: https://plugins.miniorange.com/mit-license
 
@@ -120,6 +120,13 @@ If you are still nervous about your website security or how the plugin would wor
 
 == Changelog ==
 
+= 1.3.9 =
+* Fixed the quick-edit issue
+* Added compatibility for WordPress Multisite
+* Added the frontend and backend validations for creating the roles
+* Added the role restriction for search APIs
+* Minor Bug Fixes
+
 = 1.3.8 =
 * Compatibility with WordPress 6.8
 
@@ -216,6 +223,13 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.3.9 =
+* Fixed the quick-edit issue
+* Added compatibility for WordPress Multisite
+* Added the frontend and backend validations for creating the roles
+* Added the role restriction for search APIs
+* Minor Bug Fixes
 
 = 1.3.8 =
 * Compatibility with WordPress 6.8

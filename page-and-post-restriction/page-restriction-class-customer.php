@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once 'page-restriction-utility.php';
 
-class Customer_page_restriction {
+class Papr_Customer_page_restriction {
 
 	public $email;
 	public $phone;
@@ -203,12 +203,12 @@ class Customer_page_restriction {
 		$site_url            = site_url();
 		$server_name         = isset( $_SERVER['SERVER_NAME'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_NAME'] ) ) : '';
 
-		global $user;
-		$user = wp_get_current_user();
+		global $papr_user;
+		$papr_user = wp_get_current_user();
 
 		$query = '[WP Page Restriction Free Plugin]: ' . esc_html( $message );
 
-		$content = '<div >Hello, <br><br>First Name :' . esc_html( $user->user_firstname ) . '<br><br>Last  Name :' . esc_html( $user->user_lastname ) . '   <br><br>Company :<a href="' . esc_attr( $server_name ) . '" target="_blank" >' . esc_attr( $server_name ) . '</a><br><br>Phone Number :' . esc_html( $phone ) . '<br><br>Email :<a href="mailto:' . esc_html( $email ) . '" target="_blank">' . esc_html( $email ) . '</a><br><br>Query :' . esc_html( $query ) . '</div>';
+		$content = '<div >Hello, <br><br>First Name :' . esc_html( $papr_user->user_firstname ) . '<br><br>Last  Name :' . esc_html( $papr_user->user_lastname ) . '   <br><br>Company :<a href="' . esc_attr( $server_name ) . '" target="_blank" >' . esc_attr( $server_name ) . '</a><br><br>Phone Number :' . esc_html( $phone ) . '<br><br>Email :<a href="mailto:' . esc_html( $email ) . '" target="_blank">' . esc_html( $email ) . '</a><br><br>Query :' . esc_html( $query ) . '</div>';
 
 		$fields       = array(
 			'customerKey' => $customerKey,

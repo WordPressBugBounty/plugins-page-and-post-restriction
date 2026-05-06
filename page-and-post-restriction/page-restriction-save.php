@@ -39,10 +39,7 @@ function papr_save_setting() {
 			return;
 		}
 
-		$role_capability = array();
-		foreach ( $_POST as $key => $value ) {
-			$role_capability[ $key ] = 1;
-		}
+		$role_capability = papr_get_submitted_roles();
 
 		add_role( $custom_role_name, $custom_role_display_name, $role_capability );
 
@@ -68,10 +65,7 @@ function papr_save_setting() {
 			return;
 		}
 
-		$role_capability = array();
-		foreach ( $_POST as $key => $value ) {
-			$role_capability[ $key ] = 1;
-		}
+		$role_capability = papr_get_submitted_roles();
 
 		global $wp_roles;
 		$roles = $wp_roles->roles;
@@ -518,7 +512,7 @@ function papr_save_setting() {
 		$phone = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_contact_us_phone' );
 		$query = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_contact_us_query' );
 
-		$customer = new Customer_page_restriction();
+		$customer = new Papr_Customer_page_restriction();
 		if ( papr_check_empty_or_null( $email ) || papr_check_empty_or_null( $query ) ) {
 			update_option( 'papr_message', 'Please fill up Email and Query fields to submit your query.' );
 			update_option( 'papr_message_success_fail', 'error' );
@@ -558,7 +552,7 @@ function papr_save_setting() {
 		}
 
 		$email    = get_option( 'papr_admin_email' );
-		$customer = new Customer_page_restriction();
+		$customer = new Papr_Customer_page_restriction();
 		$content  = json_decode( $customer->papr_forgot_password( $email ), true );
 		if ( ! is_null( $content ) ) {
 			if ( strcasecmp( $content['status'], 'SUCCESS' ) == 0 ) {
@@ -589,7 +583,7 @@ function papr_save_setting() {
 
 		update_option( 'papr_admin_email', $email );
 		update_option( 'papr_admin_password', $password );
-		$customer = new Customer_page_restriction();
+		$customer = new Papr_Customer_page_restriction();
 		$content  = $customer->papr_get_customer_key();
 
 		if ( ! is_null( $content ) ) {
@@ -642,7 +636,7 @@ function papr_save_setting() {
 		if ( strcmp( $password, $confirmPassword ) == 0 ) {
 			update_option( 'papr_admin_password', $password );
 			$email    = get_option( 'papr_admin_email' );
-			$customer = new Customer_page_restriction();
+			$customer = new Papr_Customer_page_restriction();
 			$content  = json_decode( $customer->papr_check_customer(), true );
 			if ( ! is_null( $content ) ) {
 				if ( strcasecmp( $content['status'], 'CUSTOMER_NOT_FOUND' ) == 0 ) {
@@ -708,7 +702,7 @@ function papr_save_setting() {
 			}
 		}
 		$phone            = get_option( 'papr_admin_phone' );
-		$feedback_reasons = new Customer_page_restriction();
+		$feedback_reasons = new Papr_Customer_page_restriction();
 		if ( ! is_null( $feedback_reasons ) ) {
 			if ( ! papr_is_curl_installed() ) {
 				deactivate_plugins( 'page-and-post-restriction\page-and-post-restriction.php' );
@@ -777,7 +771,7 @@ function papr_check_password_pattern( $password ) {
 }
 
 function papr_get_current_customer() {
-	$customer = new Customer_page_restriction();
+	$customer = new Papr_Customer_page_restriction();
 	$content  = $customer->papr_get_customer_key();
 	if ( ! is_null( $content ) ) {
 		$customerKey = json_decode( $content, true );
@@ -802,7 +796,7 @@ function papr_get_current_customer() {
 }
 
 function papr_create_customer() {
-	$customer    = new Customer_page_restriction();
+	$customer    = new Papr_Customer_page_restriction();
 	$customerKey = json_decode( $customer->papr_create_customer(), true );
 	if ( ! is_null( $customerKey ) ) {
 		$response = array();

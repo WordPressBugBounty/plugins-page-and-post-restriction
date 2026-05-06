@@ -6,14 +6,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once 'page-restriction-menu-settings.php';
 
-function papr_dropdown( $results_per_page, $type, $post_type = '' ) {
+function papr_dropdown( $results_per_page, string $type, $post_type = '' ) {
 	$dropdown_type = 'papr_' . $type . '_per_page';
 	if ( $type == 'page' ) {
 		$dropdown_type = 'papr_results_per_page';
 	}
 	?>
 
-	<form id="<?php esc_attr_e( $dropdown_type ); ?>" name="<?php esc_attr_e( $dropdown_type ); ?>" method="post" action="">
+	<form id="<?php echo esc_attr( $dropdown_type ); ?>" name="<?php echo esc_attr( $dropdown_type ); ?>" method="post" action="">
 		<input type="hidden" name="option" value="<?php echo esc_attr( $dropdown_type ); ?>">
 		<?php wp_nonce_field( $dropdown_type ); ?>
 		<div class="row align-items-center">
@@ -443,7 +443,10 @@ function papr_display_pages( $mo_page_search_value, $page, $color, $allowed_role
 		if ( $page_role_login_disable_check == 1 || $page_role_login_disable_check == 'on' || $page_role_login_disable_check == 'true' ) {
 			$page_role_login_disable = 'disabled';
 		}
-		$mo_page_val = implode( ';', $mo_page_roles_value );
+		$mo_page_val = $mo_page_roles_value;
+		if( is_array( $mo_page_roles_value ) ) {
+			$mo_page_val = implode( ';', $mo_page_roles_value );
+		}
 		?>
 		<td>
 		<input type="hidden" name="mo_hidden_page_roles_<?php echo esc_attr( $pageid ); ?>[]" id="mo_hidden_page_roles_<?php echo esc_attr( $pageid ); ?>" value="<?php echo esc_attr( $mo_page_val ); ?>">
@@ -701,6 +704,29 @@ function papr_get_restricted_posts_id() {
 	$restricted_pages = is_array( $restricted_pages ) ? array_keys( $restricted_pages ) : array();
 	$restricted_posts = is_array( $restricted_posts ) ? array_keys( $restricted_posts ) : array();
 	return array_merge( $restricted_pages, $restricted_posts );
+}
+
+/**
+ * Get the submitted roles from the form.
+ *
+ * @return array
+ */
+function papr_get_submitted_roles() {
+	$submitted_roles  = array();
+	$all_capabilities = papr_custom_roles_constants::papr_custom_roles_capabilities_constants();
+
+	foreach ( $all_capabilities as $category => $cap_list ) {
+		foreach ( $cap_list as $cap ) {
+			if ( isset( $_POST[ $cap ] ) ) {
+				$value = sanitize_text_field( wp_unslash( $_POST[ $cap ] ) );
+				if ( 'on' === $value ) {
+					$submitted_roles[ $cap ] = true;
+				}
+			}
+		}
+	}
+
+	return $submitted_roles;
 }
 
 

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.3.9
+ * Version: 1.4.0
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -22,7 +22,14 @@ require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-utility.php';
 require_once 'page-restriction-custom-roles-sub-menu.php';
 
-class page_and_post_restriction {
+class papr_page_and_post_restriction {
+
+	/**
+	 * Stores restricted post IDs to filter.
+	 *
+	 * @var array
+	 */
+	private $restricted_posts_to_filter = array();
 
 	function __construct() {
 		update_option( 'papr_host_name', 'https://login.xecurify.com' );
@@ -81,7 +88,8 @@ class page_and_post_restriction {
 		if ( $query->is_search && ! is_admin() && $query->is_main_query() ) {
 			
 			if ( ! is_user_logged_in() ) {
-				$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+				$this->restricted_posts_to_filter = papr_get_restricted_posts_id();
+				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			} else {
 				$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
 				$allowed_roles_pages = get_option( 'papr_allowed_roles_for_pages', array() );
@@ -104,13 +112,15 @@ class page_and_post_restriction {
 						}
 					}
 				}
-				$query->set( 'post__not_in', array_merge( $not_accessible_posts ) );
+				$this->restricted_posts_to_filter = array_merge( $not_accessible_posts );
+				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			}
 		}
 	
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST && isset( $query->query_vars['s'] ) ) {
 			if ( ! is_user_logged_in() ) {
-				$query->set( 'post__not_in', papr_get_restricted_posts_id() );
+				$this->restricted_posts_to_filter = papr_get_restricted_posts_id();
+				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			} else {
 				$allowed_roles = get_option( 'papr_allowed_roles_for_posts', array() );
 				$current_user = wp_get_current_user();
@@ -123,12 +133,35 @@ class page_and_post_restriction {
 						}
 					}
 				}
-				$query->set( 'post__not_in', array_merge( $not_accessible_posts ) );
+				$this->restricted_posts_to_filter = array_merge( $not_accessible_posts );
+				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			}
 		}
 	}
+
 	/**
-	 * Filter the comment query.
+	 * Filter out restricted posts after query execution.
+	 * This approach is more performant than using post__not_in.
+	 *
+	 * @param WP_Post[] $posts Array of post objects.
+	 * @param WP_Query  $query The query object.
+	 * @return WP_Post[] Filtered array of posts.
+	 */
+	public function papr_filter_restricted_posts( $posts, $query ) {
+		$restricted_posts = $this->restricted_posts_to_filter;
+		if ( empty( $restricted_posts ) ) {
+			return $posts;
+		}
+
+		return array_filter(
+			$posts,
+			function ( $post ) use ( $restricted_posts ) {
+				return ! in_array( (int) $post->ID, $restricted_posts, true );
+			}
+		);
+	}
+	/**
+	 * Filter the comment query to add post-query filtering for restricted posts.
 	 *
 	 * @param WP_Comment_Query $query Query for the comments.
 	 * @return void
@@ -136,8 +169,30 @@ class page_and_post_restriction {
 	public function papr_parse_comment_query( $query ) {
 		$routes = ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ? $GLOBALS['wp']->query_vars['rest_route'] : '';
 		if ( ! is_user_logged_in() && 0 === strpos( $routes, '/wp/v2/comments' ) ) {
-			$query->query_vars['post__not_in'] = papr_get_restricted_posts_id();
+			add_filter( 'the_comments', array( $this, 'papr_filter_restricted_comments' ), 10, 2 );
 		}
+	}
+
+	/**
+	 * Filter out comments from restricted posts after query execution.
+	 * This approach is more performant than using post__not_in.
+	 *
+	 * @param WP_Comment[] $comments Array of comment objects.
+	 * @param WP_Comment_Query $query The comment query object.
+	 * @return WP_Comment[] Filtered array of comments.
+	 */
+	public function papr_filter_restricted_comments( $comments, $query ) {
+		$restricted_posts = papr_get_restricted_posts_id();
+		if ( empty( $restricted_posts ) ) {
+			return $comments;
+		}
+
+		return array_filter(
+			$comments,
+			function ( $comment ) use ( $restricted_posts ) {
+				return ! in_array( (int) $comment->comment_post_ID, $restricted_posts, true );
+			}
+		);
 	}
 
 	/**
@@ -217,17 +272,17 @@ class page_and_post_restriction {
 		if ( $page == 'toplevel_page_page_restriction' || $page == 'page-restriction_page_papr_custom_roles_sub_menu' ) {
 			wp_enqueue_script( 'jquery' );
 			wp_enqueue_script( 'jquery-ui-autocomplete' );
-			wp_enqueue_script( 'papr_admin_settings_phone_script', plugins_url( 'includes/js/phone.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_script( 'papr_admin_settings_phone_script', plugins_url( 'includes/js/phone.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION, array( 'in_footer' => false ) );
 			wp_enqueue_style( 'papr_admin_bootstrap_settings_script', plugins_url( 'includes/js/bootstrap/bootstrap.min.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
 			wp_enqueue_style( 'papr_admin_bootstrap_settings_script', plugins_url( 'includes/js/bootstrap/popper.min.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
 			wp_enqueue_style( 'papr_admin_settings_phone_style', plugins_url( 'includes/css/phone.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
 			wp_enqueue_style( 'papr_admin_bootstrap_settings_style', plugins_url( 'includes/css/bootstrap/bootstrap.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
 			wp_enqueue_style( 'papr_admin_settings_style', plugins_url( 'includes/css/papr_settings_style.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION, 'all' );
-			wp_enqueue_script( 'papr_auto_assign_private_script', plugins_url( 'includes/js/papr-role-assigned.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
-			wp_enqueue_script( 'papr_roles_show_dropdown_script', plugins_url( 'includes/js/papr-role-dropdown.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_script( 'papr_auto_assign_private_script', plugins_url( 'includes/js/papr-role-assigned.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION, array( 'in_footer' => false )  );
+			wp_enqueue_script( 'papr_roles_show_dropdown_script', plugins_url( 'includes/js/papr-role-dropdown.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION, array( 'in_footer' => false )  );
 			wp_enqueue_style( 'papr_roles_show_dropdown_style', plugins_url('includes/css/papr_role_show_dropdown.min.css',__FILE__ ),array(), Papr_Plugin_Constants::VERSION );
 		} elseif ( $page == 'edit.php' ) {
-			wp_enqueue_script( 'populatequickedit', plugins_url( 'includes/js/page-restriction-quick-edit.js', __FILE__ ), array( 'jquery' ), Papr_Plugin_Constants::VERSION );
+			wp_enqueue_script( 'populatequickedit', plugins_url( 'includes/js/page-restriction-quick-edit.js', __FILE__ ), array( 'jquery' ), Papr_Plugin_Constants::VERSION, array( 'in_footer' => false ) );
 		} else {
 			return;
 		}
@@ -804,5 +859,5 @@ class page_and_post_restriction {
 		}
 	}
 }
-new page_and_post_restriction();
+new papr_page_and_post_restriction();
 ?>

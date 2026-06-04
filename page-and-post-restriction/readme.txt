@@ -2,10 +2,10 @@
 Contributors: miniOrange
 Donate link: https://miniorange.com
 Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction, Restrict Access
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.4.0
+Stable tag: 1.4.1
 License: Expat
 License URI: https://plugins.miniorange.com/mit-license
 
@@ -120,6 +120,10 @@ If you are still nervous about your website security or how the plugin would wor
 
 == Changelog ==
 
+= 1.4.1 =
+* Compatibility with WordPress 7.0
+* Feature: Added Page Restriction abilities support for the  WordPress Abilities API
+
 = 1.4.0 =
 * Security Fixes
 * Minor Bug Fixes
@@ -227,6 +231,10 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.4.1 =
+* Compatibility with WordPress 7.0
+* Feature: Added Page Restriction abilities support for the WordPress Abilities API
 
 = 1.4.0 =
 * Security Fixes

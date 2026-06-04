@@ -9,6 +9,19 @@ require_once 'page-and-post-restriction.php';
 require_once 'page-restriction-utility.php';
 
 function papr_save_setting() {
+	if ( papr_check_form_option( 'papr_abilities_api' ) && check_admin_referer( 'papr_abilities_api' ) ) {
+		$abilities_api_enable_requested = isset( $_POST['papr_enable_abilities_api'] ) && 'true' === wp_unslash( $_POST['papr_enable_abilities_api'] );
+		PAPR_Register_Abilities::papr_process_abilities_api_toggle( wp_unslash( $_POST ) );
+		if ( $abilities_api_enable_requested && ! PAPR_Register_Abilities::papr_abilities_api_available() ) {
+			update_option( 'papr_message', __( 'Abilities API could not be enabled: WordPress 6.8+ and the Abilities API (and MCP Adapter when required) must be installed.', 'page-and-post-restriction' ) );
+			update_option( 'papr_message_success_fail', 'error' );
+		} else {
+			update_option( 'papr_message', __( 'Abilities API settings saved.', 'page-and-post-restriction' ) );
+			update_option( 'papr_message_success_fail', 'success' );
+		}
+		return;
+	}
+
 	if ( papr_check_form_option( 'papr_custom_create_roles' ) && check_admin_referer( 'papr_custom_create_roles' ) ) {
 		unset( $_POST['_wpnonce'] );
 		unset( $_POST['_wp_http_referer'] );

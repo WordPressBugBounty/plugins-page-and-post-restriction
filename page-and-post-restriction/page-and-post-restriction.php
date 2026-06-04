@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.4.0
+ * Version: 1.4.1
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -16,10 +16,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 define( 'PAPR_PLUGIN_DIR', dirname( __FILE__ ) );
 define( 'PAPR_CONSTANTS_FILE', '/page-restriction-constants.php' );
 require_once PAPR_PLUGIN_DIR . PAPR_CONSTANTS_FILE;
+require_once PAPR_PLUGIN_DIR . '/papr-register-abilities.php';
 require_once 'page-restriction-save.php';
 require_once 'feedback-form.php';
 require_once 'page-restriction-menu-settings.php';
 require_once 'page-restriction-utility.php';
+require_once PAPR_PLUGIN_DIR . '/papr-abilities-api-page.php';
 require_once 'page-restriction-custom-roles-sub-menu.php';
 
 class papr_page_and_post_restriction {
@@ -33,6 +35,7 @@ class papr_page_and_post_restriction {
 
 	function __construct() {
 		update_option( 'papr_host_name', 'https://login.xecurify.com' );
+		add_action( 'init', array( 'PAPR_Register_Abilities', 'schedule_abilities_api_hooks' ), 1 );
 		add_action( 'admin_menu', array( $this, 'papr_menu' ), 11 );
 		add_action( 'admin_init', 'papr_save_setting', 1, 0 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'papr_plugin_settings_script' ) );
@@ -219,6 +222,7 @@ class papr_page_and_post_restriction {
 	function papr_menu() {
 		add_menu_page( 'Page and Post Restriction', 'Page Restriction', 'administrator', 'page_restriction', 'papr_page_restriction', plugin_dir_url( __FILE__ ) . 'includes/images/miniorange.png' );
 		add_submenu_page( 'page_restriction', 'Custom Roles', 'Roles and Capabilities', 'administrator', 'papr_custom_roles_sub_menu', 'papr_custom_roles_sub_menu' );
+		add_submenu_page( 'page_restriction', 'Abilities API', 'Abilities API', 'manage_options', 'papr_abilities_api', 'papr_display_abilities_api_page' );
 	}
 	function papr_add_plugin_settings( $links ) {
 		$links = array_merge(
@@ -269,7 +273,7 @@ class papr_page_and_post_restriction {
 	}
 
 	static function papr_plugin_settings_script( $page ) {
-		if ( $page == 'toplevel_page_page_restriction' || $page == 'page-restriction_page_papr_custom_roles_sub_menu' ) {
+		if ( $page == 'toplevel_page_page_restriction' || $page == 'page-restriction_page_papr_custom_roles_sub_menu' || $page == 'page-restriction_page_papr_abilities_api' ) {
 			wp_enqueue_script( 'jquery' );
 			wp_enqueue_script( 'jquery-ui-autocomplete' );
 			wp_enqueue_script( 'papr_admin_settings_phone_script', plugins_url( 'includes/js/phone.js', __FILE__ ), array(), Papr_Plugin_Constants::VERSION, array( 'in_footer' => false ) );

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.4.1
+ * Version: 1.4.2
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -51,33 +51,123 @@ class papr_page_and_post_restriction {
 		add_action( 'quick_edit_custom_box', array( $this, 'papr_display_custom_quick_edit_fields' ), 10, 2 );
 		add_shortcode( 'restrict_content', array( $this, 'papr_restrict_content' ) );
 		add_action( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'papr_add_plugin_settings' ) );
-		add_action( 'rest_api_init', array( $this, 'papr_restrict_page_post_rest_api' ) );
+		add_filter( 'rest_pre_dispatch', array( $this, 'papr_restrict_page_post_rest_api' ), 10, 3 );
 		add_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
 		add_filter( 'parse_comment_query', array( $this, 'papr_parse_comment_query' ) );
 	}
 
 	/**
-	 * Restrict the /pages and /posts rest api endpoints.
+	 * Restrict the /pages and /posts REST API endpoints.
 	 *
-	 * @return void
+	 * Hooked on `rest_pre_dispatch` so the current user is already authenticated
+	 * by the REST server (cookie + nonce, Application Passwords, etc.) before the
+	 * access check runs. `rest_api_init` fires too early for that.
+	 *
+	 * @param mixed           $result  Response to replace the requested version with.
+	 * @param WP_REST_Server  $server  Server instance.
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 * @return mixed Original $result when allowed, or a WP_Error (403) when restricted.
 	 */
-	public function papr_restrict_page_post_rest_api() {
-		$routes = ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ? $GLOBALS['wp']->query_vars['rest_route'] : '';
-		if ( ! is_user_logged_in() && ( 0 === strpos( $routes, '/wp/v2/pages' ) || 0 === strpos( $routes, '/wp/v2/posts' ) ) ) {
-			$route_parts      = explode( '/', trim( $routes, '/' ) );
-			$id               = isset( $route_parts[3] ) ? intval( $route_parts[3] ) : 0;
+	public function papr_restrict_page_post_rest_api( $result, $server, $request ) {
+		if ( ! empty( $result ) ) {
+			return $result;
+		}
+
+		$route   = $request->get_route();
+		$is_page = ( 0 === strpos( $route, '/wp/v2/pages' ) );
+		$is_post = ( 0 === strpos( $route, '/wp/v2/posts' ) );
+		if ( ! $is_page && ! $is_post ) {
+			return $result;
+		}
+
+		$id = preg_match( '#^/wp/v2/(?:posts|pages)/(\d+)#', $route, $matches ) ? (int) $matches[1] : 0;
+
+		if ( ! is_user_logged_in() ) {
 			$restricted_posts = papr_get_restricted_posts_id();
 			if ( in_array( $id, $restricted_posts, true ) ) {
-				wp_send_json(
-					array(
-						'code'    => 'rest_forbidden',
-						'message' => __( 'Sorry, you are not allowed to access this endpoint.', 'page-and-post-restriction' ),
-						'data'    => array( 'status' => 403 ),
-					),
-					403
-				);
+				return $this->papr_send_rest_forbidden();
 			}
+			if ( $id > 0 && $this->papr_is_private_for_guests_by_toggle( $id, $is_page ) ) {
+				return $this->papr_send_rest_forbidden();
+			}
+			return $result;
 		}
+
+		if ( $id > 0 && $this->papr_is_restricted_by_role_for_current_user( $id ) ) {
+			return $this->papr_send_rest_forbidden();
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Determine whether a page/post must be private to non-logged-in users because
+	 * the global "make all private" toggle is enabled and the item has not been
+	 * individually exempted (its per-item "Require Login" checkbox has no value).
+	 *
+	 * Mirrors the front-end logic in papr_restrict_logged_in_users().
+	 *
+	 * @param int  $id      Page or post ID requested through the REST API.
+	 * @param bool $is_page Whether the requested item is a page (true) or post (false).
+	 * @return bool True if the item must be hidden from non-logged-in users.
+	 */
+	private function papr_is_private_for_guests_by_toggle( $id, $is_page ) {
+		if ( $is_page ) {
+			$toggle       = get_option( 'papr_access_for_only_loggedin' );
+			$unrestricted = get_option( 'papr_login_unrestricted_pages', array() );
+		} else {
+			$toggle       = get_option( 'papr_access_for_only_loggedin_posts' );
+			$unrestricted = get_option( 'papr_login_unrestricted_posts', array() );
+		}
+
+		if ( 1 != $toggle ) {
+			return false;
+		}
+
+		$unrestricted = is_array( $unrestricted ) ? $unrestricted : array();
+		return empty( $unrestricted[ $id ] );
+	}
+
+	/**
+	 * Check whether the current logged-in user's role is restricted from the given page/post.
+	 *
+	 * @param int $id Page or post ID requested through the REST API.
+	 * @return bool True if the current user's role is not allowed to access the page/post.
+	 */
+	private function papr_is_restricted_by_role_for_current_user( $id ) {
+		$allowed_roles_pages = get_option( 'papr_allowed_roles_for_pages', array() );
+		$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
+
+		$allowed_roles = array();
+		if ( is_array( $allowed_roles_pages ) && ! empty( $allowed_roles_pages[ $id ] ) ) {
+			$allowed_roles = $allowed_roles_pages[ $id ];
+		} elseif ( is_array( $allowed_roles_posts ) && ! empty( $allowed_roles_posts[ $id ] ) ) {
+			$allowed_roles = $allowed_roles_posts[ $id ];
+		}
+
+		if ( empty( $allowed_roles ) || ! is_array( $allowed_roles ) ) {
+			return false;
+		}
+
+		$current_user = wp_get_current_user();
+		$user_roles   = $current_user->roles;
+		return empty( array_intersect( $allowed_roles, $user_roles ) );
+	}
+
+	/**
+	 * Build a 403 forbidden response for restricted REST API requests.
+	 *
+	 * Returned from `rest_pre_dispatch` so the REST server converts it into a
+	 * proper 403 JSON response.
+	 *
+	 * @return WP_Error
+	 */
+	private function papr_send_rest_forbidden() {
+		return new WP_Error(
+			'rest_forbidden',
+			__( 'Sorry, you are not allowed to access this endpoint.', 'page-and-post-restriction' ),
+			array( 'status' => 403 )
+		);
 	}
 
 
@@ -89,9 +179,11 @@ class papr_page_and_post_restriction {
 	 */
 	public function papr_filter_posts( $query ) {
 		if ( $query->is_search && ! is_admin() && $query->is_main_query() ) {
-			
 			if ( ! is_user_logged_in() ) {
-				$this->restricted_posts_to_filter = papr_get_restricted_posts_id();
+				$this->restricted_posts_to_filter = array_merge(
+					papr_get_restricted_posts_id(),
+					$this->papr_get_toggle_private_ids( $query )
+				);
 				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			} else {
 				$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
@@ -119,27 +211,71 @@ class papr_page_and_post_restriction {
 				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			}
 		}
-	
-		if ( defined( 'REST_REQUEST' ) && REST_REQUEST && isset( $query->query_vars['s'] ) ) {
-			if ( ! is_user_logged_in() ) {
-				$this->restricted_posts_to_filter = papr_get_restricted_posts_id();
-				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
-			} else {
-				$allowed_roles = get_option( 'papr_allowed_roles_for_posts', array() );
-				$current_user = wp_get_current_user();
-				$user_roles = $current_user->roles;
-				$not_accessible_posts = array();
-				if ( is_array( $allowed_roles ) ) {
-					foreach ( $allowed_roles as $post_id => $roles ) {
-						if ( ! array_intersect( $roles, $user_roles ) ) {
-							$not_accessible_posts[] = $post_id;
-						}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			$not_accessible_posts = array();
+			$accessible_posts     = array();
+			$user_roles           = is_user_logged_in() ? wp_get_current_user()->roles : array();
+			$allowed_roles_posts  = get_option( 'papr_allowed_roles_for_posts', array() );
+			$allowed_roles_pages  = get_option( 'papr_allowed_roles_for_pages', array() );
+			foreach ( array( $allowed_roles_posts, $allowed_roles_pages ) as $allowed_roles ) {
+				if ( ! is_array( $allowed_roles ) ) {
+					continue;
+				}
+				foreach ( $allowed_roles as $post_id => $roles ) {
+					if ( 'mo_page_0' === $post_id || empty( $roles ) || ! is_array( $roles ) ) {
+						continue;
+					}
+					if ( array_intersect( $roles, $user_roles ) ) {
+						$accessible_posts[] = (int) $post_id;
+					} else {
+						$not_accessible_posts[] = (int) $post_id;
 					}
 				}
-				$this->restricted_posts_to_filter = array_merge( $not_accessible_posts );
+			}
+			if ( ! is_user_logged_in() ) {
+				$not_accessible_posts = array_merge( $not_accessible_posts, papr_get_restricted_posts_id() );
+				$not_accessible_posts = array_merge( $not_accessible_posts, $this->papr_get_toggle_private_ids( $query ) );
+			}
+
+			$not_accessible_posts = array_diff( array_unique( $not_accessible_posts ), $accessible_posts );
+
+			if ( ! empty( $not_accessible_posts ) ) {
+				$this->restricted_posts_to_filter = array_values( $not_accessible_posts );
 				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			}
 		}
+	}
+
+	/**
+	 * Collect IDs that must be hidden from non-logged-in users because the global
+	 * "make all private" toggle is enabled and the item has not been individually
+	 * exempted. Only enumerates the post type(s) being queried.
+	 *
+	 * @param WP_Query $query The current query.
+	 * @return int[] IDs to exclude from the results.
+	 */
+	private function papr_get_toggle_private_ids( $query ) {
+		$ids        = array();
+		$post_types = array_values( array_filter( (array) $query->get( 'post_type' ), 'strlen' ) );
+		$all_types  = empty( $post_types ) || in_array( 'any', $post_types, true );
+
+		if ( $all_types || in_array( 'page', $post_types, true ) ) {
+			foreach ( $this->get_all_published_page_ids( 'page' ) as $page_id ) {
+				if ( $this->papr_is_private_for_guests_by_toggle( $page_id, true ) ) {
+					$ids[] = (int) $page_id;
+				}
+			}
+		}
+
+		if ( $all_types || in_array( 'post', $post_types, true ) ) {
+			foreach ( $this->get_all_published_page_ids( 'post' ) as $post_id ) {
+				if ( $this->papr_is_private_for_guests_by_toggle( $post_id, false ) ) {
+					$ids[] = (int) $post_id;
+				}
+			}
+		}
+
+		return $ids;
 	}
 
 	/**

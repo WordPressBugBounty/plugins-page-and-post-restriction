@@ -5,7 +5,7 @@ Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction,
 Tested up to: 7.0
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.4.1
+Stable tag: 1.4.2
 License: Expat
 License URI: https://plugins.miniorange.com/mit-license
 
@@ -120,6 +120,9 @@ If you are still nervous about your website security or how the plugin would wor
 
 == Changelog ==
 
+= 1.4.2 =
+* Enhanced Rest API Security for Pages and Posts
+
 = 1.4.1 =
 * Compatibility with WordPress 7.0
 * Feature: Added Page Restriction abilities support for the  WordPress Abilities API
@@ -231,6 +234,9 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.4.2 =
+* Enhanced Rest API Security for Pages and Posts
 
 = 1.4.1 =
 * Compatibility with WordPress 7.0

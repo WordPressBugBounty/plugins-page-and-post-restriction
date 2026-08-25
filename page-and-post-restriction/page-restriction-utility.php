@@ -650,6 +650,37 @@ function papr_add_query_arg( $url ) {
 	return $url;
 }
 
+/**
+ * Whether the current user is allowed to view/change the plugin's page & post
+ * restriction settings (the "Allowed Roles" / "Private" meta box and Quick Edit
+ * fields). Administrators are always allowed; other roles are allowed only if
+ * an admin has explicitly delegated access via the "papr_allowed_metabox_roles"
+ * setting.
+ */
+function papr_current_user_can_manage_restriction() {
+	$current_user = wp_get_current_user();
+	$user_roles   = $current_user->roles;
+
+	if ( ! is_array( $user_roles ) ) {
+		return false;
+	}
+
+	if ( papr_in_array( 'administrator', $user_roles ) ) {
+		return true;
+	}
+
+	$papr_metabox_allowed_roles = get_option( 'papr_allowed_metabox_roles' );
+	if ( empty( $papr_metabox_allowed_roles ) ) {
+		$papr_metabox_allowed_roles = 'editor;author;';
+	}
+	if ( $papr_metabox_allowed_roles === 'papr_no_roles' ) {
+		$papr_metabox_allowed_roles = '';
+	}
+	$metabox_roles_array = array_filter( array_map( 'trim', explode( ';', strtolower( $papr_metabox_allowed_roles ) ) ) );
+
+	return ! empty( array_intersect( $metabox_roles_array, $user_roles ) );
+}
+
 function papr_check_form_option( $option_name ) {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- The nonce verification is done where this function is called.
 	return ( isset( $_POST['option'] ) && $_POST['option'] === $option_name );

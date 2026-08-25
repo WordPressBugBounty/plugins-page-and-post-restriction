@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.4.2
+ * Version: 1.5.0
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -406,6 +406,7 @@ class papr_page_and_post_restriction {
 		delete_option( 'papr_category_per_page' );
 		delete_option( 'papr_guest_enabled' );
 		delete_option( 'papr_roles_per_page' );
+		delete_option( 'papr_allowed_metabox_roles' );
 	}
 
 	static function papr_plugin_settings_script( $page ) {
@@ -432,7 +433,7 @@ class papr_page_and_post_restriction {
 		if ( ! is_user_logged_in() ) {
 			return '';
 		}
-		return '<p>' . $content . '</p>';
+		return '<p>' . wp_kses_post( do_shortcode( $content ) ) . '</p>';
 	}
 
 	function papr_page_add_column( $column_array ) {
@@ -516,6 +517,10 @@ class papr_page_and_post_restriction {
 
 	function papr_display_custom_quick_edit_fields( $column_name, $post_type ) {
 
+		if ( ! papr_current_user_can_manage_restriction() ) {
+			return;
+		}
+
 		wp_nonce_field( 'papr_quick_edit_nonce', 'papr_quick_edit_option_nonce' );
 
 		if ( $column_name == 'Allowed_Roles' ) {
@@ -556,16 +561,6 @@ class papr_page_and_post_restriction {
 	function papr_add_custom_meta_box( $post_type ) {
 
 		global $pagenow;
-		$papr_metabox_allowed_roles = get_option( 'papr_allowed_metabox_roles' );
-		if ( empty( $papr_metabox_allowed_roles ) ) {
-			$papr_metabox_allowed_roles = 'Editor; Author;';
-		}
-		if ( $papr_metabox_allowed_roles == 'papr_no_roles' ) {
-			$papr_metabox_allowed_roles = '';
-		}
-		$metabox_roles_array = explode( ';', $papr_metabox_allowed_roles );
-		$current_user        = wp_get_current_user();
-		$user_roles          = $current_user->roles;
 
 		if ( in_array( $pagenow, array( 'post-new.php' ) ) ) {
 			if ( $post_type == 'page' && get_option( 'papr_select_all_pages' ) == 'checked' ) {
@@ -586,10 +581,8 @@ class papr_page_and_post_restriction {
 			}
 		}
 
-		if ( is_array( $user_roles ) ) {
-			if ( empty( array_intersect( $metabox_roles_array, $user_roles ) ) && ( ! papr_in_array( 'administrator', $user_roles ) ) ) {
-				return;
-			}
+		if ( ! papr_current_user_can_manage_restriction() ) {
+			return;
 		}
 
 		$type = get_post_type_object( $post_type );
@@ -845,6 +838,10 @@ class papr_page_and_post_restriction {
 			) {
 			return;
 			}
+
+		if ( ! papr_current_user_can_manage_restriction() ) {
+			return;
+		}
 
 		$type = get_post_type( $post );
 

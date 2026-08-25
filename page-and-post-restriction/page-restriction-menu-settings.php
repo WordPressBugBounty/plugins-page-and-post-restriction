@@ -30,6 +30,9 @@ function papr_page_restriction() {
 				<?php
 				papr_message_success_fail();
 				switch ( $current_tab ) {
+					case 'general_settings':
+						papr_general_settings();
+						break;
 					case 'custom_restriction':
 						papr_custom_restrict();
 						break;
@@ -136,6 +139,7 @@ function papr_nav_tab( $current_tab ) {
 				'Tag Access'             => 'tag_access',
 				'Category Access'        => 'category_access',
 				'Roles and Capabilities' => 'custom_role',
+				'General'                => 'general_settings',
 				'Account Setup'          => 'account_setup',
 			);
 			
@@ -219,6 +223,45 @@ function papr_custom_restrict() {
 
 		}
 	</script>
+	<?php
+}
+
+function papr_general_settings() {
+	$papr_metabox_allowed_roles = get_option( 'papr_allowed_metabox_roles' );
+	if ( $papr_metabox_allowed_roles === false ) {
+		$papr_metabox_allowed_roles = 'editor;author;';
+	} elseif ( $papr_metabox_allowed_roles === 'papr_no_roles' ) {
+		$papr_metabox_allowed_roles = '';
+	}
+	?>
+	<div class="rounded bg-white papr-shadow p-4 mt-4 ms-4">
+		<h4 class="papr-form-head">Allow Other Roles to Manage Page/Post Restriction</h4>
+		<div class="papr-bg-cstm p-3 rounded mt-4">
+			<p class="mt-3">
+				<b>Administrators</b> can always manage the Page/Post Restriction "Allowed Roles" / "Private" meta box and Quick Edit fields. By default, <b>Editor</b> and <b>Author</b> are also allowed.<br>
+				Enter the roles below (separated by semicolons, e.g. <b>editor;author;</b>) that should be allowed to manage these settings.
+			</p>
+		</div>
+		<br>
+		<form method="post" action="">
+			<?php wp_nonce_field( 'papr_allowed_metabox_roles' ); ?>
+			<input type="hidden" name="option" value="papr_allowed_metabox_roles">
+			<div class="row mt-4">
+				<div class="col-md-3">
+					<h6>Allowed Roles :</h6>
+				</div>
+				<div class="col-md-6">
+					<input class="mo_saml_table_textbox w-100" type="text" name="papr_metabox_roles" id="papr_metabox_roles" placeholder="Eg: editor;author;" value="<?php echo esc_attr( $papr_metabox_allowed_roles ); ?>">
+				</div>
+			</div>
+			<div class="row mt-4">
+				<div class="col-md-3"></div>
+				<div class="col-md-9">
+					<input type="submit" name="submit" value="Save Settings" class="papr-btn-cstm rounded">
+				</div>
+			</div>
+		</form>
+	</div>
 	<?php
 }
 

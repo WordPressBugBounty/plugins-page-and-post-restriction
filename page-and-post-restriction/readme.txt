@@ -2,10 +2,10 @@
 Contributors: miniOrange
 Donate link: https://miniorange.com
 Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction, Restrict Access
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.4.2
+Stable tag: 1.5.0
 License: Expat
 License URI: https://plugins.miniorange.com/mit-license
 
@@ -91,7 +91,7 @@ Our Page restriction WordPress - Protect WP Pages/Posts plugin for WordPress com
 <a href="https://plugins.miniorange.com/wordpress-page-restriction#pagerestriction">https://plugins.miniorange.com/wordpress-page-restriction#pagerestriction</a>
 
 == CONTACT SUPPORT ==
-If you are still nervous about your website security or how the plugin would work for you specifically, customized solutions and Active support are available. You can always <a href="https://www.miniorange.com/contact/">Contact Us</a>, or Email us at samlsupport@xecurify.com and we would be happy to help you out.
+If you are still nervous about your website security or how the plugin would work for you specifically, customized solutions and Active support are available. You can always <a href="https://www.miniorange.com/contact/">Contact Us</a>, or Email us at samlsupport@xecurify.com and we would be happy to help you out<a href="https://patchstack.com/database/vdp/c306f68e-068f-4ba9-ae62-ca1058fe8a50" target="_blank">.</a>
 
 
 == Installation ==
@@ -119,6 +119,12 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Changelog ==
+
+= 1.5.0 =
+* Compatibility with 7.1
+* Fixed a Cross-Site Scripting (XSS) in the [restrict_content] shortcode output
+* Fixed a Broken Access Control that allowed non-administrator roles to modify Page/Post Restriction settings via Quick Edit
+* Feature: Added a General Settings tab to configure roles allowed to manage restriction settings
 
 = 1.4.2 =
 * Enhanced Rest API Security for Pages and Posts
@@ -234,6 +240,12 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+* Compatibility with 7.1
+* Fixed a Cross-Site Scripting (XSS) in the [restrict_content] shortcode output
+* Fixed a Broken Access Control that allowed non-administrator roles to modify Page/Post Restriction settings via Quick Edit
+* Feature: Added a General Settings tab to configure roles allowed to manage restriction settings
 
 = 1.4.2 =
 * Enhanced Rest API Security for Pages and Posts

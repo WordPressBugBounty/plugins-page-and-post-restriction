@@ -114,6 +114,19 @@ function papr_save_setting() {
 		return;
 	}
 
+	if ( papr_check_form_option( 'papr_allowed_metabox_roles' ) && check_admin_referer( 'papr_allowed_metabox_roles' ) ) {
+		global $wp_roles;
+		$posted_roles   = papr_get_sanitized_post_option( 'sanitize_text_field', 'papr_metabox_roles' );
+		$posted_roles   = array_filter( array_map( 'trim', explode( ';', strtolower( $posted_roles ) ) ) );
+		$selected_roles = array_intersect( $posted_roles, array_keys( $wp_roles->roles ) );
+		$roles_value    = ! empty( $selected_roles ) ? implode( ';', $selected_roles ) . ';' : 'papr_no_roles';
+
+		update_option( 'papr_allowed_metabox_roles', $roles_value );
+		update_option( 'papr_message', 'Allowed roles updated successfully.' );
+		update_option( 'papr_message_success_fail', 'success' );
+		return;
+	}
+
 	if ( papr_check_form_option( 'papr_restrict_pages_roles_login' ) && check_admin_referer( 'papr_restrict_pages_roles_login' ) ) {
 		unset( $_POST['_wpnonce'] );
 		unset( $_POST['_wp_http_referer'] );

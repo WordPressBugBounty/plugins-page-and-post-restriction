@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -54,10 +54,12 @@ class papr_page_and_post_restriction {
 		add_filter( 'rest_pre_dispatch', array( $this, 'papr_restrict_page_post_rest_api' ), 10, 3 );
 		add_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
 		add_filter( 'parse_comment_query', array( $this, 'papr_parse_comment_query' ) );
+		add_filter( 'the_content_feed', array( $this, 'papr_restrict_feed_content' ), 10, 2 );
+		add_filter( 'the_excerpt_rss', array( $this, 'papr_restrict_feed_content' ) );
 	}
 
 	/**
-	 * Restrict the /pages and /posts REST API endpoints.
+	 * Restrict the /pages, /posts and /comments REST API endpoints.
 	 *
 	 * Hooked on `rest_pre_dispatch` so the current user is already authenticated
 	 * by the REST server (cookie + nonce, Application Passwords, etc.) before the
@@ -73,31 +75,91 @@ class papr_page_and_post_restriction {
 			return $result;
 		}
 
-		$route   = $request->get_route();
-		$is_page = ( 0 === strpos( $route, '/wp/v2/pages' ) );
-		$is_post = ( 0 === strpos( $route, '/wp/v2/posts' ) );
-		if ( ! $is_page && ! $is_post ) {
-			return $result;
+		if ( ! get_current_user_id() && in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) && ( $user_id = wp_validate_auth_cookie( '', 'logged_in' ) ) ) {
+			wp_set_current_user( $user_id );
 		}
 
-		$id = preg_match( '#^/wp/v2/(?:posts|pages)/(\d+)#', $route, $matches ) ? (int) $matches[1] : 0;
+		$route = $request->get_route();
 
-		if ( ! is_user_logged_in() ) {
-			$restricted_posts = papr_get_restricted_posts_id();
-			if ( in_array( $id, $restricted_posts, true ) ) {
-				return $this->papr_send_rest_forbidden();
-			}
-			if ( $id > 0 && $this->papr_is_private_for_guests_by_toggle( $id, $is_page ) ) {
+		if ( 0 === strpos( $route, '/wp/v2/pages' ) || 0 === strpos( $route, '/wp/v2/posts' ) ) {
+			$is_page = ( 0 === strpos( $route, '/wp/v2/pages' ) );
+			$id      = preg_match( '#^/wp/v2/(?:posts|pages)/(\d+)#', $route, $matches ) ? (int) $matches[1] : 0;
+
+			if ( $id > 0 && ! $this->papr_is_post_accessible_to_current_user( $id, $is_page ) ) {
 				return $this->papr_send_rest_forbidden();
 			}
 			return $result;
 		}
 
-		if ( $id > 0 && $this->papr_is_restricted_by_role_for_current_user( $id ) ) {
-			return $this->papr_send_rest_forbidden();
+		if ( 0 === strpos( $route, '/wp/v2/comments' ) ) {
+			return $this->papr_restrict_comments_rest_api( $route, $request, $result );
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Restrict the /comments REST API endpoints for comments belonging to
+	 * restricted posts/pages, mirroring papr_restrict_page_post_rest_api().
+	 *
+	 * Handles both the single-comment route (/wp/v2/comments/{id}) - which
+	 * never runs through WP_Comment_Query, so `the_comments` never fires for
+	 * it - and the collection route when a `post` parameter is supplied.
+	 *
+	 * @param string          $route   REST route being dispatched.
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 * @param mixed           $result  Original dispatch result to pass through when allowed.
+	 * @return mixed Original $result when allowed, or a WP_Error (403) when restricted.
+	 */
+	private function papr_restrict_comments_rest_api( $route, $request, $result ) {
+		$post_ids = array();
+
+		if ( preg_match( '#^/wp/v2/comments/(\d+)#', $route, $matches ) ) {
+			$comment = get_comment( (int) $matches[1] );
+			if ( $comment ) {
+				$post_ids[] = (int) $comment->comment_post_ID;
+			}
+		} else {
+			$post_param = $request->get_param( 'post' );
+			if ( ! empty( $post_param ) ) {
+				$post_ids = array_map( 'intval', (array) $post_param );
+			}
+		}
+
+		foreach ( $post_ids as $post_id ) {
+			if ( $post_id <= 0 ) {
+				continue;
+			}
+			if ( ! $this->papr_is_post_accessible_to_current_user( $post_id, 'page' === get_post_type( $post_id ) ) ) {
+				return $this->papr_send_rest_forbidden();
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Determine whether the current REST requester (guest or logged-in) is
+	 * allowed to access the given page/post, combining the guest-restriction
+	 * and role-restriction checks used across posts, pages and comments.
+	 *
+	 * @param int  $id      Page or post ID.
+	 * @param bool $is_page Whether the item is a page (true) or post (false).
+	 * @return bool True if accessible to the current user, false if restricted.
+	 */
+	private function papr_is_post_accessible_to_current_user( $id, $is_page ) {
+		if ( ! is_user_logged_in() ) {
+			$restricted_posts = papr_get_restricted_posts_id();
+			if ( in_array( $id, $restricted_posts, true ) ) {
+				return false;
+			}
+			if ( $this->papr_is_private_for_guests_by_toggle( $id, $is_page ) ) {
+				return false;
+			}
+			return true;
+		}
+
+		return ! $this->papr_is_restricted_by_role_for_current_user( $id );
 	}
 
 	/**
@@ -155,6 +217,50 @@ class papr_page_and_post_restriction {
 	}
 
 	/**
+	 * Determine whether the given page/post must be hidden from the current visitor,
+	 * covering "Require Login", the global "make all private" toggle, and role-based
+	 * restriction. Used to strip restricted content out of feeds.
+	 *
+	 * @param int $post_id Page or post ID.
+	 * @return bool True if the current visitor should not see this page/post.
+	 */
+	private function papr_is_post_restricted_for_current_user( $post_id ) {
+		$post_id = (int) $post_id;
+		$is_page = ( 'page' === get_post_type( $post_id ) );
+
+		if ( ! is_user_logged_in() ) {
+			if ( in_array( $post_id, papr_get_restricted_posts_id(), true ) ) {
+				return true;
+			}
+			return $this->papr_is_private_for_guests_by_toggle( $post_id, $is_page );
+		}
+
+		return $this->papr_is_restricted_by_role_for_current_user( $post_id );
+	}
+
+	/**
+	 * Strip the content/excerpt of a restricted page/post out of RSS/Atom feeds.
+	 * Defense-in-depth alongside the `pre_get_posts` feed filtering in papr_filter_posts(),
+	 * in case a restricted item still ends up in a feed loop (e.g. custom feed queries).
+	 *
+	 * @param string $content  Feed content or excerpt.
+	 * @param string $feed_type Optional feed type, passed by `the_content_feed`.
+	 * @return string
+	 */
+	public function papr_restrict_feed_content( $content, $feed_type = null ) {
+		$post_id = get_the_ID();
+		if ( ! $post_id ) {
+			return $content;
+		}
+
+		if ( $this->papr_is_post_restricted_for_current_user( $post_id ) ) {
+			return '';
+		}
+
+		return $content;
+	}
+
+	/**
 	 * Build a 403 forbidden response for restricted REST API requests.
 	 *
 	 * Returned from `rest_pre_dispatch` so the REST server converts it into a
@@ -168,6 +274,27 @@ class papr_page_and_post_restriction {
 			__( 'Sorry, you are not allowed to access this endpoint.', 'page-and-post-restriction' ),
 			array( 'status' => 403 )
 		);
+	}
+
+	/**
+	 * Halt a restricted single post/page feed request (e.g. /post-slug/feed/) with a
+	 * JSON 403 response instead of letting the feed template render, and instead of the
+	 * plain-text wp_die() used for normal browser page views.
+	 *
+	 * @return void This function terminates the request.
+	 */
+	private function papr_send_feed_forbidden_json() {
+		status_header( 403 );
+		nocache_headers();
+		header( 'Content-Type: application/json; charset=' . get_bloginfo( 'charset' ) );
+		echo wp_json_encode(
+			array(
+				'code'    => 'papr_forbidden',
+				'message' => __( 'Oops! You are not authorized to access this', 'page-and-post-restriction' ),
+				'data'    => array( 'status' => 403 ),
+			)
+		);
+		exit;
 	}
 
 
@@ -244,6 +371,41 @@ class papr_page_and_post_restriction {
 				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
 			}
 		}
+
+		if ( $query->is_feed() && $query->is_main_query() && ! $query->is_singular() ) {
+			$restricted_ids = array();
+
+			if ( ! is_user_logged_in() ) {
+				$restricted_ids = array_merge(
+					papr_get_restricted_posts_id(),
+					$this->papr_get_toggle_private_ids( $query )
+				);
+			} else {
+				$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
+				$allowed_roles_pages = get_option( 'papr_allowed_roles_for_pages', array() );
+				$current_user        = wp_get_current_user();
+				$user_roles          = $current_user->roles;
+
+				foreach ( array( $allowed_roles_posts, $allowed_roles_pages ) as $allowed_roles ) {
+					if ( ! is_array( $allowed_roles ) ) {
+						continue;
+					}
+					foreach ( $allowed_roles as $post_id => $roles ) {
+						if ( 'mo_page_0' === $post_id || empty( $roles ) || ! is_array( $roles ) ) {
+							continue;
+						}
+						if ( ! array_intersect( $roles, $user_roles ) ) {
+							$restricted_ids[] = (int) $post_id;
+						}
+					}
+				}
+			}
+
+			if ( ! empty( $restricted_ids ) ) {
+				$this->restricted_posts_to_filter = array_values( array_unique( array_merge( $this->restricted_posts_to_filter, $restricted_ids ) ) );
+				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
+			}
+		}
 	}
 
 	/**
@@ -307,13 +469,16 @@ class papr_page_and_post_restriction {
 	 */
 	public function papr_parse_comment_query( $query ) {
 		$routes = ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ? $GLOBALS['wp']->query_vars['rest_route'] : '';
-		if ( ! is_user_logged_in() && 0 === strpos( $routes, '/wp/v2/comments' ) ) {
+		if ( 0 === strpos( $routes, '/wp/v2/comments' ) ) {
 			add_filter( 'the_comments', array( $this, 'papr_filter_restricted_comments' ), 10, 2 );
 		}
 	}
 
 	/**
-	 * Filter out comments from restricted posts after query execution.
+	 * Filter out comments belonging to restricted posts/pages after query
+	 * execution. Acts as a fallback for comment queries that don't carry a
+	 * `post` request param (so papr_restrict_comments_rest_api() couldn't
+	 * pre-check them) - e.g. GET /wp/v2/comments with no `post` filter.
 	 * This approach is more performant than using post__not_in.
 	 *
 	 * @param WP_Comment[] $comments Array of comment objects.
@@ -321,15 +486,14 @@ class papr_page_and_post_restriction {
 	 * @return WP_Comment[] Filtered array of comments.
 	 */
 	public function papr_filter_restricted_comments( $comments, $query ) {
-		$restricted_posts = papr_get_restricted_posts_id();
-		if ( empty( $restricted_posts ) ) {
-			return $comments;
-		}
-
 		return array_filter(
 			$comments,
-			function ( $comment ) use ( $restricted_posts ) {
-				return ! in_array( (int) $comment->comment_post_ID, $restricted_posts, true );
+			function ( $comment ) {
+				$post_id = (int) $comment->comment_post_ID;
+				if ( $post_id <= 0 ) {
+					return true;
+				}
+				return $this->papr_is_post_accessible_to_current_user( $post_id, 'page' === get_post_type( $post_id ) );
 			}
 		);
 	}
@@ -668,7 +832,7 @@ class papr_page_and_post_restriction {
 		foreach ( $user_roles as $key => $user_role ) {
 			if ( is_front_page() && ! empty( $allowed_roles_for_pages['mo_page_0'] ) ) {
 				foreach ( $allowed_roles_for_pages['mo_page_0'] as $keys => $allowed_roles_for_page ) {
-					if ( strripos( $allowed_roles_for_page, $user_role ) !== false ) {
+					if ( strcasecmp( $allowed_roles_for_page, $user_role ) === 0 ) {
 						return;
 					}
 				}
@@ -676,7 +840,7 @@ class papr_page_and_post_restriction {
 				if ( is_array( $allowed_roles_for_types ) ) {
 					if ( ! empty( $allowed_roles_for_types[ $page_post_id ] ) ) {
 						foreach ( $allowed_roles_for_types[ $page_post_id ] as $keys => $allowed_roles_for_type ) {
-							if ( strripos( $allowed_roles_for_type, $user_role ) !== false ) {
+							if ( strcasecmp( $allowed_roles_for_type, $user_role ) === 0 ) {
 								return;
 							}
 						}
@@ -703,6 +867,13 @@ class papr_page_and_post_restriction {
 		$type = get_post_type( $page_post_id );
 
 		if ( $type != 'page' && $type != 'post' ) {
+			return;
+		}
+
+		if ( is_feed() ) {
+			if ( $this->papr_is_post_restricted_for_current_user( $page_post_id ) ) {
+				$this->papr_send_feed_forbidden_json();
+			}
 			return;
 		}
 

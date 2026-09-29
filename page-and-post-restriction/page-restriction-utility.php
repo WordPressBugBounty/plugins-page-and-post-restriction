@@ -748,7 +748,9 @@ function papr_get_submitted_roles() {
 
 	foreach ( $all_capabilities as $category => $cap_list ) {
 		foreach ( $cap_list as $cap ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified by the caller via check_admin_referer() before this helper runs.
 			if ( isset( $_POST[ $cap ] ) ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified by the caller via check_admin_referer() before this helper runs.
 				$value = sanitize_text_field( wp_unslash( $_POST[ $cap ] ) );
 				if ( 'on' === $value ) {
 					$submitted_roles[ $cap ] = true;

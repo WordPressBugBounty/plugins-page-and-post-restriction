@@ -5,7 +5,7 @@ Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction,
 Tested up to: 7.1
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: Expat
 License URI: https://plugins.miniorange.com/mit-license
 
@@ -119,6 +119,11 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Changelog ==
+
+= 1.6.0 =
+* Fixed an issue where restricted page/post content was visible to unauthenticated users through RSS/Atom feeds
+* Fixed an issue where comments on restricted pages/posts were visible via the REST API and comment feeds
+* Fixed an issue with role-name matching on role-restricted pages/posts
 
 = 1.5.0 =
 * Compatibility with 7.1
@@ -240,6 +245,11 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.6.0 =
+* Fixed an issue where restricted page/post content was visible to unauthenticated users through RSS/Atom feeds
+* Fixed an issue where comments on restricted pages/posts were visible via the REST API and comment feeds
+* Fixed an issue with role-name matching on role-restricted pages/posts
 
 = 1.5.0 =
 * Compatibility with 7.1

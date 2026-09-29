@@ -10,7 +10,7 @@ require_once 'page-restriction-utility.php';
 
 function papr_save_setting() {
 	if ( papr_check_form_option( 'papr_abilities_api' ) && check_admin_referer( 'papr_abilities_api' ) ) {
-		$abilities_api_enable_requested = isset( $_POST['papr_enable_abilities_api'] ) && 'true' === wp_unslash( $_POST['papr_enable_abilities_api'] );
+		$abilities_api_enable_requested = isset( $_POST['papr_enable_abilities_api'] ) && 'true' === sanitize_text_field( wp_unslash( $_POST['papr_enable_abilities_api'] ) );
 		PAPR_Register_Abilities::papr_process_abilities_api_toggle( wp_unslash( $_POST ) );
 		if ( $abilities_api_enable_requested && ! PAPR_Register_Abilities::papr_abilities_api_available() ) {
 			update_option( 'papr_message', __( 'Abilities API could not be enabled: WordPress 6.8+ and the Abilities API (and MCP Adapter when required) must be installed.', 'page-and-post-restriction' ) );

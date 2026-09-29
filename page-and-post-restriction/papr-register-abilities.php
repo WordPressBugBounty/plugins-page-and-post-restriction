@@ -767,7 +767,7 @@ class PAPR_Register_Abilities {
 						);
 					}
 
-					$wp_roles = wp_roles();
+					global $wp_roles;
 					if ( ! is_object( $wp_roles ) || ! isset( $wp_roles->roles ) ) {
 						return new \WP_Error( 'papr_roles_unavailable', __( 'WordPress roles could not be loaded.', 'page-and-post-restriction' ) );
 					}
@@ -802,8 +802,8 @@ class PAPR_Register_Abilities {
 						);
 					}
 
-					$wp_roles = wp_roles();
-					$count    = is_object( $wp_roles ) && isset( $wp_roles->roles ) ? count( $wp_roles->roles ) : 0;
+					global $wp_roles;
+					$count = is_object( $wp_roles ) && isset( $wp_roles->roles ) ? count( $wp_roles->roles ) : 0;
 
 					$what_it_does = __( 'Lets you create a brand-new user role by copying the permissions from an existing one. Super quick way to set up custom access.', 'page-and-post-restriction' );
 					$admin_action = __( 'Assign the new role to a test user and check that their permissions are what you expected.', 'page-and-post-restriction' );
@@ -1083,7 +1083,7 @@ class PAPR_Register_Abilities {
 	 * @return array<int, string>|\WP_Error
 	 */
 	private static function papr_validate_and_normalize_role_slugs( array $roles ) {
-		$wp_roles = wp_roles();
+		global $wp_roles;
 		if ( ! is_object( $wp_roles ) || ! isset( $wp_roles->roles ) || ! is_array( $wp_roles->roles ) ) {
 			return new \WP_Error(
 				'papr_roles_unavailable',

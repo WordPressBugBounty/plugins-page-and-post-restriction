@@ -734,7 +734,39 @@ function papr_get_restricted_posts_id() {
 	$restricted_posts = get_option( 'papr_allowed_redirect_for_posts' );
 	$restricted_pages = is_array( $restricted_pages ) ? array_keys( $restricted_pages ) : array();
 	$restricted_posts = is_array( $restricted_posts ) ? array_keys( $restricted_posts ) : array();
-	return array_merge( $restricted_pages, $restricted_posts );
+	return array_values( array_unique( array_merge( $restricted_pages, $restricted_posts, papr_get_role_restricted_ids() ) ) );
+}
+
+/**
+ * Return the IDs of pages/posts that have role restriction configured.
+ * Role restriction implies login is required, even if "Require Login" is not set.
+ *
+ * @return array
+ */
+function papr_get_role_restricted_ids() {
+	$ids = array();
+	foreach ( array( 'papr_allowed_roles_for_pages', 'papr_allowed_roles_for_posts' ) as $option ) {
+		$allowed_roles = maybe_unserialize( get_option( $option ) );
+		if ( ! is_array( $allowed_roles ) ) {
+			continue;
+		}
+		foreach ( $allowed_roles as $id => $roles ) {
+			if ( ! empty( $roles ) ) {
+				$ids[] = (int) $id;
+			}
+		}
+	}
+	return $ids;
+}
+
+/**
+ * Check whether a page/post has role restriction configured.
+ *
+ * @param int $id Page or post ID.
+ * @return bool
+ */
+function papr_has_role_restriction( $id ) {
+	return in_array( (int) $id, papr_get_role_restricted_ids(), true );
 }
 
 /**

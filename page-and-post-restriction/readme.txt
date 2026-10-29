@@ -5,7 +5,7 @@ Tags: Content Restriction, Page Restriction, Restrict Content, Post Restriction,
 Tested up to: 7.1
 Requires PHP: 5.6
 Requires at least: 3.7
-Stable tag: 1.6.1
+Stable tag: 1.6.2
 License: Expat
 License URI: https://plugins.miniorange.com/mit-license
 
@@ -14,11 +14,11 @@ Restrict content access for WordPress (WP) | Restrict pages/posts in WP based on
 == Description ==
 CONTENT RESTRICTION / PAGE POST RESTRICTION | PROTECT CONTENT FOR WORDPRESS
 
-Content Restriction provide control of the entire content of your WordPress sites. This includes Page Restriction and Post Restriction i.e. Content restriction according to User Roles. You can Protect content by setting consent for single-entity users on WordPress sites based on their roles. Here a user role has permission to access a page; the authorization enables access to that user. By default, all roles will have access to the content of the page. 
+Content Restriction lets you control who can view the pages and posts of your WordPress site as they browse it. This includes Page Restriction and Post Restriction i.e. Content restriction according to User Roles. You can Protect content by setting consent for single-entity users on WordPress sites based on their roles. Here a user role has permission to access a page; the authorization enables access to that user. By default, all roles will have access to the content of the page. 
 Page Restriction provides page protection by allowing content access to only Logged In Users to specific or all pages. Restrict access of your pages to logged-out users by showing them an error message letting them know they do not have permission to look into the content on the particular page.
 
 
-Besides Page Restrictions, we also provide Post Restrictions (Content restriction) feature which helps to Protect content by Restricting access for posts on logged-in/out status to users or specific user roles. Our WordPress Post restrictions feature also helps you to Restrict access in categories to logged-in/out users or specific user roles. We Display a custom message to users who do not have permission to view the content or redirect them to a specified URL. In our Page restriction, Post restriction Plugin our Individual Posts feature will enable protection for default posts as well as custom post types.
+Besides Page Restrictions, we also provide Post Restrictions (Content restriction) feature which helps to Protect content by Restricting access for posts on logged-in/out status to users or specific user roles. Users who do not have permission to view a restricted page or post are shown an error message instead of its content. The premium version extends this to categories and custom post types, and lets you display a custom message or redirect users to a specified URL.
 
 Content Restriction also includes role-based capabilities which help in creating new custom roles and provide capabilities. You can create roles and customize them by assigning various WordPress capabilities to them according to requirements. You can also restrict content of your WordPress according to these custom roles with the help of our roles and capabilities feature.
 
@@ -28,12 +28,12 @@ Content Restriction also includes role-based capabilities which help in creating
 == CONTENT RESTRICTION - FREE VERSION FEATURES ==
 * **Page restriction**: Restrict pages / Protect Content / Restrict user access by applying Page restriction on all or specific pages of your site. You can apply Page restriction to all the pages or restrict particular pages from the users that are not logged-in. Restricted users will be shown a static / default error message 
 * **Post restriction**: Restrict access for individual posts. Restrict user access by applying Post restriction on all or specific posts. Restrict posts by showing a static / default error message to the users who do not have permission to access the content
-* **Site restriction**: You can enable site restriction and restrict access of your site to logged-in users and restrict/protect content of your site from those who are not logged- in. Complete site restriction will restrict your entire site and users won’t have the content access. Restricted users will be shown a static / default error message. 
-* **Content Restriction based on user login status**: Restrict content (Page restriction | Post restriction | site restriction | tag restriction | widgets restriction | taxonomies restriction) and allow only logged-in users the content access. Protect content from those who are not logged-in users of the site. Those who are not logged-in won’t have the content access and will be shown a static / default error restriction message 
+* **Site restriction**: You can enable site restriction and restrict access of your site to logged-in users and restrict/protect content of your site from those who are not logged- in. Site restriction applies to all the pages and posts of your site, so users who are not logged in won’t have access to their content. Restricted users will be shown a static / default error message. 
+* **Content Restriction based on user login status**: Restrict content (Page restriction | Post restriction | site restriction) and allow only logged-in users the content access. Protect content from those who are not logged-in users of the site. Those who are not logged-in won’t have the content access and will be shown a static / default error restriction message 
 * **Restrict content based on one or more WordPress Roles**: This option allows content restriction according to the roles. Assign roles to the users and then give the content access according to the roles assigned to the users. Protect content confidential to a specific user role by restricting other user roles.
 * **Restrict Pages/Posts while Creating (Meta Box)**: Page restriction / Post restriction option while creating a particular page or post. This provides page restriction and Post restriction options to users while creating and editing posts/pages. This shows all the site’s user roles based on which Page restriction and Post restriction can be made. The meta box also asks if login is required to access the page/post.
 * **Restrict all of your WordPress pages or posts**:  this option allows you to restrict all the pages or posts available on your WordPress site. This option gives an effortless experience if you want to restrict pages, restrict posts or restrict content as you don’t have to list down individual pages or posts to restrict them from unauthorized users. A convenient way to protect all of your content in one step.
-* **Unlimited WordPress Content restriction**:  Restrict pages | Restrict posts | Restrict content to an unlimited extent. Any number of Page restrictions | Post restriction | Content restriction is allowed. The Page Restriction Plugin can work with large number of pages, posts and other WordPress content without overloading your servers. You can restrict as many pages / posts as you have in your WordPress, control their content, restrict users to have content access to your WordPress pages / posts and you won’t be held back by safety concerns due to the increasing number of pages/posts in you WordPress site.
+* **Unlimited WordPress Content restriction**:  Restrict pages | Restrict posts | Restrict content to an unlimited extent. Any number of Page restrictions | Post restriction | Content restriction is allowed. The Page Restriction Plugin can work with large number of pages, posts and other WordPress content without overloading your servers. You can restrict as many pages / posts as you have in your WordPress and control which users can view them.
 * **Static Error Message**: Protect content by restricting users who do not have permission to view the content by redirecting to a static / default error message.
 * **Apply Parent Page Post Restriction to all Child Pages**: Configure restrictions for the parent page and apply to all its child pages. Choose which parent page’s restrictions should be applied to its child pages.  
 * **Create New Roles**: The Page restriction and post restriction plugin allows you to create new WordPress Roles and assign capabilities as per the requirements. Create unlimited custom roles in your WordPress and protect content according to the user roles created
@@ -41,6 +41,8 @@ Content Restriction also includes role-based capabilities which help in creating
 * **Update existing Roles**: Default existing roles can be updated according to the requirements of the users. With the Page restriction plugin, users will be able to edit role names, delete or update roles, create a copy of an existing role etc.
 * **Restrict using Quick Edit**: Page Restriction / Post Restriction Plugin gives an option of quick edit on the restriction interface to make it convenient for you to edit the content restriction settings without going to the very restricted content.
 * **Restrict specific blocks/excerpts in a Page/Post**: Restrict specific blocks in the content of pages or posts. Use opening and closing tags of the shortcode anywhere in the page/post to restrict the access to the content present in the between the tags of the shortcode.  
+
+**Note**: Restrictions in the free version apply to pages and posts as visitors view them on your site. Files in the Media Library, and content accessed by other means such as apps or third-party integrations, are not restricted. <a href="https://www.miniorange.com/contact/">Contact us</a> if you need broader content protection.
 
 
 == PAGE RESTRICTION - PREMIUM VERSION FEATURES ==
@@ -63,16 +65,16 @@ Content Restriction also includes role-based capabilities which help in creating
 
 Managing a website is easier than ever nowadays. Do you have content you only want certain WordPress users to access? Now you can manage content for specific users as well as control or restrict content access for certain groups.
 
-Page restrictions and Post restrictions permit you to control / protect who can see as well as alter restrictions on individual pages in a space. Content Restriction allows to restrict entire WordPress content (site restriction | tag restriction | widgets restriction | taxonomies restriction) according to the user login status or their WordPress roles.We energetically suggest investigating your site needs and provide you the miniOrange Page Restriction WordPress plugin specially designed for integrating with WordPress Sites to keep your website safe with a user-friendly experience at an affordable price.
+Page restrictions and Post restrictions permit you to control / protect who can see as well as alter restrictions on individual pages in a space. Content Restriction allows you to restrict what visitors can view on your WordPress site (site restriction, plus tag, widget and taxonomy restriction in the premium version) according to the user login status or their WordPress roles.We energetically suggest investigating your site needs and provide you the miniOrange Page Restriction WordPress plugin specially designed for integrating with WordPress Sites to keep your website safe with a user-friendly experience at an affordable price.
 
 
 == BENEFITS OF USING CONTENT RESTRICTION WORDPRESS PLUGIN ==
-* **Restrict access to complete site**: Our Page restriction WordPress plugin helps to Protect content on your WordPress site and its feed make it completely private with more flexibility to restrict to private pages. This is very useful for intranet sites.
+* **Restrict access to complete site**: Our Page restriction WordPress plugin helps you make the pages and posts of your WordPress site viewable only by logged-in users, with the flexibility to keep selected pages open. This is very useful for intranet sites.
 * **Unlimited content restriction**: Content Restriction WordPress provides granular access to your content by applying restrictions on unlimited pages and posts on your site.
-* **Supports Custom Post Types**: You can even restrict access to custom post types which gives you complete control over your content on WordPress
+* **Supports Custom Post Types**: With the premium version you can also restrict access to custom post types
 * **Multiple User Roles**: Page Restriction | Post restriction plugin can provide one, two, or even more roles to any pages. Multiple roles could be assigned to pages/posts simultaneously.
 * **Inherited Restrictions**: Page Restriction | Post restriction plugin helps you to make content restriction as easy as possible by reflecting the changes down to child pages/posts when a restriction is applied to the parent one.
-* **Customize redirect**: Helps you integrate the plugin seamlessly by allowing you to customize restricted messages and choose login authentication for Single Sign-On (SSO) redirecting to the IDP login page and redirecting to the WP login page.
+* **Customize redirect**: With the premium version you can customize restricted messages and choose login authentication for Single Sign-On (SSO) redirecting to the IDP login page and redirecting to the WP login page.
 * **Easy to use**: Ease to set up and designed with user-friendly interfaces or Ease of use with protected content integrates User management and role-based content access
 * **Multi-level content access**: The option to hide content from different user roles and even nested pages
 * **Restrict Anonymous/Other users**: Our Page and Post restriction plugin limits anonymous/other user roles to your site who are logged in from accessing site content.
@@ -80,7 +82,7 @@ Page restrictions and Post restrictions permit you to control / protect who can 
 
 **HOW WE ARE DIFFERENT**
 
-miniOrange has various types of deployments that give the customer a safe and protective choice. miniOrange offers a plugin, Cloud, and On-premise server module. We provide a reliable plugin with extended functionality in a cost-beneficial manner to Protect content on your WordPress sites. Our Page restriction WordPress, Post restriction plugin for WordPress sites, carries a lot of features within it like protecting posts, pages, custom post types. . If you are looking for a greater amount of administrative control over your WordPress website in a cost-efficient manner miniOrange is best with the powerful content restriction feature.
+miniOrange has various types of deployments that give the customer a safe and protective choice. miniOrange offers a plugin, Cloud, and On-premise server module. We provide a reliable plugin with extended functionality in a cost-beneficial manner to Protect content on your WordPress sites. Our Page restriction WordPress, Post restriction plugin for WordPress sites, carries a lot of features within it like protecting posts and pages, plus custom post types in the premium version. If you are looking for a greater amount of administrative control over your WordPress website in a cost-efficient manner miniOrange is best with the powerful content restriction feature.
 
 == CONTRIBUTED BY MINIORANGE ==
 Page restriction WordPress - Protect WP Pages/Posts is built by miniOrange. We create high-quality WordPress plugins that help you grow your WordPress sites.
@@ -119,6 +121,10 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Changelog ==
+
+= 1.6.2 =
+* Fixed an issue where restricted posts were listed with their title and content on the blog home page and on category, tag, author and date archives
+* Fixed an issue where restricted posts were shown in the Latest Posts block, Recent Posts widget and previous/next post links
 
 = 1.6.1 =
 * Fixed a Broken Access Control that allowed restricted pages/posts and their comments to be accessed via the REST API
@@ -249,6 +255,10 @@ If you are still nervous about your website security or how the plugin would wor
 
 
 == Upgrade Notice ==
+
+= 1.6.2 =
+* Fixed an issue where restricted posts were listed with their title and content on the blog home page and on category, tag, author and date archives
+* Fixed an issue where restricted posts were shown in the Latest Posts block, Recent Posts widget and previous/next post links
 
 = 1.6.1 =
 * Fixed a Broken Access Control that allowed restricted pages/posts and their comments to be accessed via the REST API

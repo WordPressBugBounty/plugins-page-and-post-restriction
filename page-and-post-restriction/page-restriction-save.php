@@ -700,6 +700,9 @@ function papr_save_setting() {
 		}
 		return;
 	} elseif ( papr_check_form_option( 'papr_skip_feedback' ) && check_admin_referer( 'papr_skip_feedback' ) ) {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to deactivate plugins.', 'page-and-post-restriction' ), '', array( 'response' => 403 ) );
+		}
 		update_option( 'papr_message', 'Plugin deactivated successfully' );
 		update_option( 'papr_message_success_fail', 'success' );
 		deactivate_plugins( 'page-and-post-restriction\page-and-post-restriction.php' );
@@ -707,6 +710,9 @@ function papr_save_setting() {
 	}
 
 	if ( papr_check_form_option( 'papr_feedback' ) && check_admin_referer( 'papr_feedback' ) ) {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to deactivate plugins.', 'page-and-post-restriction' ), '', array( 'response' => 403 ) );
+		}
 		$user                      = wp_get_current_user();
 		$message                   = 'Plugin Deactivated';
 		$deactivate_reason_message = ! empty( $_POST['papr_query_feedback'] ) ? sanitize_text_field( wp_unslash( $_POST['papr_query_feedback'] ) ) : false;

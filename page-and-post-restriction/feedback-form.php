@@ -5,8 +5,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 function papr_display_feedback_form() {
-	$papr_filename = isset( $_SERVER['PHP_SELF'] ) ? sanitize_text_field( wp_unslash( $_SERVER['PHP_SELF'] ) ) : '';
-	if ( 'plugins.php' != basename( $papr_filename ) ) {
+	// Use $pagenow, not PHP_SELF: PATH_INFO (/wp-admin/profile.php/plugins.php) makes
+	// basename( PHP_SELF ) report plugins.php on screens any logged-in user can open.
+	global $pagenow;
+	if ( 'plugins.php' !== $pagenow || ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
 	wp_enqueue_style( 'papr_admin_plugin_feedback_style', plugins_url( '/includes/css/papr_feedback_style.min.css', __FILE__ ), array(), Papr_Plugin_Constants::VERSION );

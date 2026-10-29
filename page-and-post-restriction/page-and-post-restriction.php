@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.6.1
+ * Version: 1.6.2
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -27,11 +27,11 @@ require_once 'page-restriction-custom-roles-sub-menu.php';
 class papr_page_and_post_restriction {
 
 	/**
-	 * Stores restricted post IDs to filter.
+	 * Per-request cache of toggle-private IDs, keyed by post type ('page'/'post').
 	 *
 	 * @var array
 	 */
-	private $restricted_posts_to_filter = array();
+	private $toggle_private_ids_cache = array();
 
 	function __construct() {
 		update_option( 'papr_host_name', 'https://login.xecurify.com' );
@@ -41,8 +41,9 @@ class papr_page_and_post_restriction {
 		add_action( 'admin_enqueue_scripts', array( $this, 'papr_plugin_settings_script' ) );
 		register_deactivation_hook( __FILE__, array( $this, 'papr_deactivate' ) );
 		add_action( 'save_post', array( $this, 'papr_save_meta_box_info' ), 10, 3 );
+		add_action( 'save_post_page', array( $this, 'papr_inherit_parent_restriction' ), 20, 2 );
 		add_action( 'wp', array( $this, 'papr_initialize_page_restrict' ), 0 );
-		add_action( 'add_meta_boxes', array( $this, 'papr_add_custom_meta_box' ) );
+		add_action( 'add_meta_boxes', array( $this, 'papr_add_custom_meta_box' ), 10, 2 );
 		add_action( 'admin_footer', array( $this, 'papr_feedback_request' ) );
 		add_filter( 'manage_page_posts_columns', array( $this, 'papr_page_add_column' ) );
 		add_filter( 'manage_post_posts_columns', array( $this, 'papr_post_add_column' ) );
@@ -58,29 +59,195 @@ class papr_page_and_post_restriction {
 		add_filter( 'the_excerpt_rss', array( $this, 'papr_restrict_feed_content' ) );
 		add_filter( 'comment_feed_where', array( $this, 'papr_filter_comment_feed_where' ), 10, 2 );
 		add_filter( 'oembed_request_post_id', array( $this, 'papr_restrict_oembed_post_id' ), 10, 2 );
+		add_filter( 'get_previous_post_where', array( $this, 'papr_filter_adjacent_post_where' ) );
+		add_filter( 'get_next_post_where', array( $this, 'papr_filter_adjacent_post_where' ) );
+		add_filter( 'redirect_canonical', array( $this, 'papr_filter_redirect_to_restricted' ) );
+		add_filter( 'old_slug_redirect_url', array( $this, 'papr_filter_redirect_to_restricted' ) );
+		add_action( 'pre_comment_on_post', array( $this, 'papr_block_comment_on_restricted_post' ) );
+		add_filter( 'comments_open', array( $this, 'papr_filter_comments_open' ), 10, 2 );
+		add_filter( 'pings_open', array( $this, 'papr_filter_comments_open' ), 10, 2 );
+		add_filter( 'getarchives_where', array( $this, 'papr_filter_archives_where' ) );
+		add_filter( 'xmlrpc_methods', array( $this, 'papr_filter_xmlrpc_methods' ) );
+	}
+
+	/**
+	 * Leave restricted pages/posts out of wp_get_archives() (Archives block/widget).
+	 *
+	 * The "postbypost" and "alpha" types list post titles and permalinks, and the
+	 * other types count posts; wp_get_archives() queries the posts table directly,
+	 * so neither `pre_get_posts` nor `the_posts` applies to it.
+	 *
+	 * @param string $where The WHERE clause of the archives query.
+	 * @return string
+	 */
+	public function papr_filter_archives_where( $where ) {
+		if ( ! $this->papr_is_front_end_request() ) {
+			return $where;
+		}
+
+		$restricted_ids = $this->papr_get_feed_restricted_ids();
+		if ( empty( $restricted_ids ) ) {
+			return $where;
+		}
+
+		return $where . ' AND ID NOT IN (' . implode( ',', array_map( 'intval', $restricted_ids ) ) . ')';
+	}
+
+	/**
+	 * Route pingback.extensions.getPingbacks through papr_xmlrpc_get_pingbacks().
+	 *
+	 * @param array $methods XML-RPC methods, keyed by method name.
+	 * @return array
+	 */
+	public function papr_filter_xmlrpc_methods( $methods ) {
+		if ( isset( $methods['pingback.extensions.getPingbacks'] ) ) {
+			$methods['pingback.extensions.getPingbacks'] = array( $this, 'papr_xmlrpc_get_pingbacks' );
+		}
+		return $methods;
+	}
+
+	/**
+	 * XML-RPC pingback.extensions.getPingbacks for restricted pages/posts.
+	 *
+	 * The method needs no login and lists the pingback sources of any post; for a
+	 * restricted one, answer exactly as for a URL that matches no post, so the
+	 * response does not reveal that it exists either.
+	 *
+	 * @param string $url URL of the page/post to list pingbacks for.
+	 * @return array|IXR_Error
+	 */
+	public function papr_xmlrpc_get_pingbacks( $url ) {
+		global $wp_xmlrpc_server;
+
+		$post_id = $this->papr_url_to_postid_unfiltered( $url );
+		if ( $post_id > 0 && $this->papr_is_page_or_post_restricted( $post_id ) ) {
+			/** This filter is documented in wp-includes/class-wp-xmlrpc-server.php */
+			return apply_filters( 'xmlrpc_pingback_error', new IXR_Error( 33, __( 'The specified target URL cannot be used as a target. It either does not exist, or it is not a pingback-enabled resource.', 'page-and-post-restriction' ) ) );
+		}
+
+		return $wp_xmlrpc_server->pingback_extensions_getPingbacks( $url );
+	}
+
+	/**
+	 * Whether a page/post is restricted for the current visitor. Other post types
+	 * are never restricted.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	private function papr_is_page_or_post_restricted( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post || ! in_array( $post->post_type, array( 'page', 'post' ), true ) ) {
+			return false;
+		}
+
+		return $this->papr_is_post_restricted_for_current_user( $post->ID );
+	}
+
+	/**
+	 * Cancel canonical and old-slug redirects that point at a restricted item.
+	 *
+	 * Requests WordPress first treats as a 404 (e.g. ?p=ID&page=2, a partial slug)
+	 * never reach papr_initialize_page_restrict() as the restricted
+	 * post, but redirect_canonical() would still send its permalink in the Location
+	 * header. Covers the 404 slug guess too, as redirect_canonical() filters its result.
+	 *
+	 * @param string|false $redirect_url Redirect target.
+	 * @return string|false Original target, or false to cancel the redirect.
+	 */
+	public function papr_filter_redirect_to_restricted( $redirect_url ) {
+		if ( empty( $redirect_url ) ) {
+			return $redirect_url;
+		}
+
+		$post_id = $this->papr_url_to_postid_unfiltered( $redirect_url );
+		if ( $post_id > 0 && $this->papr_is_page_or_post_restricted( $post_id ) ) {
+			return false;
+		}
+
+		return $redirect_url;
+	}
+
+	/**
+	 * Remove restricted pages/posts from the main query of a 404 request.
+	 *
+	 * WordPress turns some singular requests into a 404 but keeps the post in the
+	 * main query and in global $post, e.g. ?p=ID&page=2 (page out of range). The
+	 * checks in papr_initialize_page_restrict() rely on is_single()/is_page(), which
+	 * are false on a 404, so templates that still loop the query (the embed template
+	 * with &embed=true) would render the restricted post's title and content.
+	 *
+	 * @return void
+	 */
+	private function papr_strip_restricted_from_404() {
+		global $wp_query, $post;
+
+		if ( empty( $wp_query->posts ) ) {
+			return;
+		}
+
+		$allowed = array();
+		foreach ( $wp_query->posts as $queried_post ) {
+			if ( ! $this->papr_is_page_or_post_restricted( $queried_post->ID ) ) {
+				$allowed[] = $queried_post;
+			}
+		}
+
+		if ( count( $allowed ) === count( $wp_query->posts ) ) {
+			return;
+		}
+
+		$wp_query->posts        = $allowed;
+		$wp_query->post_count   = count( $allowed );
+		$wp_query->current_post = -1;
+		$wp_query->post         = $allowed ? $allowed[0] : null;
+		$post                   = $wp_query->post;
+	}
+
+	/**
+	 * Reject comment submissions (wp-comments-post.php) to restricted pages/posts.
+	 *
+	 * @param int $comment_post_id ID of the post being commented on.
+	 * @return void
+	 */
+	public function papr_block_comment_on_restricted_post( $comment_post_id ) {
+		if ( $this->papr_is_page_or_post_restricted( $comment_post_id ) ) {
+			wp_die( esc_html( 'Oops! You are not authorized to access this' ), '', array( 'response' => 403 ) );
+		}
+	}
+
+	/**
+	 * Report comments and pings as closed on restricted pages/posts, so no comment
+	 * form is rendered and core rejects submissions (wp-comments-post.php, REST and
+	 * XML-RPC pingback.ping, which checks pings_open() and never fires
+	 * pre_comment_on_post).
+	 *
+	 * @param bool $open    Whether comments (or pings) are open.
+	 * @param int  $post_id Post ID.
+	 * @return bool
+	 */
+	public function papr_filter_comments_open( $open, $post_id ) {
+		if ( ! $open || ! $this->papr_is_front_end_request() ) {
+			return $open;
+		}
+
+		return ! $this->papr_is_page_or_post_restricted( $post_id );
 	}
 
 	/**
 	 * Resolve a URL to a post ID without this plugin's query filtering.
 	 *
-	 * url_to_postid() runs a WP_Query for pretty permalinks, and during REST
-	 * requests papr_filter_restricted_posts() strips restricted posts from every
-	 * query, so a restricted URL would otherwise resolve to 0.
+	 * url_to_postid() runs a WP_Query for pretty permalinks, and papr_filter_posts()
+	 * excludes restricted posts from REST and front-end queries, so a restricted URL
+	 * would otherwise resolve to 0.
 	 *
 	 * @param string $url URL to resolve.
 	 * @return int Post ID, or 0 if the URL does not match a post.
 	 */
 	private function papr_url_to_postid_unfiltered( $url ) {
-		$had_posts_filter = has_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ) );
 		remove_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
-		remove_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10 );
-
 		$post_id = (int) url_to_postid( $url );
-
 		add_filter( 'pre_get_posts', array( $this, 'papr_filter_posts' ) );
-		if ( false !== $had_posts_filter ) {
-			add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
-		}
 
 		return $post_id;
 	}
@@ -118,7 +285,8 @@ class papr_page_and_post_restriction {
 	}
 
 	/**
-	 * Restrict the /pages, /posts and /comments REST API endpoints.
+	 * Restrict the /pages, /posts and /comments REST API endpoints, oEmbed, and
+	 * /wp/v2 routes that take a `post` parameter (term lists of a post).
 	 *
 	 * Hooked on `rest_request_before_callbacks` so the current user is already
 	 * authenticated by the REST server (cookie + nonce, Application Passwords,
@@ -134,10 +302,6 @@ class papr_page_and_post_restriction {
 	public function papr_restrict_page_post_rest_api( $result, $handler, $request ) {
 		if ( ! empty( $result ) ) {
 			return $result;
-		}
-
-		if ( ! get_current_user_id() && in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) && ( $user_id = wp_validate_auth_cookie( '', 'logged_in' ) ) ) {
-			wp_set_current_user( $user_id );
 		}
 
 		// WordPress matches REST routes case-insensitively, so normalize before comparing.
@@ -171,6 +335,16 @@ class papr_page_and_post_restriction {
 				return $this->papr_send_rest_forbidden();
 			}
 			return $result;
+		}
+
+		// Other /wp/v2 routes that take a `post` parameter, e.g. /wp/v2/categories?post=ID
+		// and /wp/v2/tags?post=ID, which list the terms of that post.
+		if ( 0 === strpos( $route, '/wp/v2/' ) && in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) ) {
+			foreach ( array_map( 'intval', (array) $request->get_param( 'post' ) ) as $post_id ) {
+				if ( $post_id > 0 && $this->papr_is_page_or_post_restricted( $post_id ) ) {
+					return $this->papr_send_rest_forbidden();
+				}
+			}
 		}
 
 		return $result;
@@ -229,6 +403,10 @@ class papr_page_and_post_restriction {
 	 * @return bool True if accessible to the current user, false if restricted.
 	 */
 	private function papr_is_post_accessible_to_current_user( $id, $is_page ) {
+		if ( $this->papr_is_restricted_static_front_page( $id ) ) {
+			return false;
+		}
+
 		if ( ! is_user_logged_in() ) {
 			$restricted_posts = papr_get_restricted_posts_id();
 			if ( in_array( $id, $restricted_posts, true ) ) {
@@ -277,7 +455,7 @@ class papr_page_and_post_restriction {
 	 * @param int $id Page or post ID requested through the REST API.
 	 * @return bool True if the current user's role is not allowed to access the page/post.
 	 */
-	private function papr_is_restricted_by_role_for_current_user( $id ) {
+	private static function papr_is_restricted_by_role_for_current_user( $id ) {
 		$allowed_roles_pages = get_option( 'papr_allowed_roles_for_pages', array() );
 		$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
 
@@ -308,6 +486,10 @@ class papr_page_and_post_restriction {
 	private function papr_is_post_restricted_for_current_user( $post_id ) {
 		$post_id = (int) $post_id;
 		$is_page = ( 'page' === get_post_type( $post_id ) );
+
+		if ( $this->papr_is_restricted_static_front_page( $post_id ) ) {
+			return true;
+		}
 
 		if ( ! is_user_logged_in() ) {
 			if ( in_array( $post_id, papr_get_restricted_posts_id(), true ) ) {
@@ -367,15 +549,13 @@ class papr_page_and_post_restriction {
 	private function papr_send_feed_forbidden_json() {
 		status_header( 403 );
 		nocache_headers();
-		header( 'Content-Type: application/json; charset=' . get_bloginfo( 'charset' ) );
-		echo wp_json_encode(
+		wp_send_json(
 			array(
 				'code'    => 'papr_forbidden',
 				'message' => __( 'Oops! You are not authorized to access this', 'page-and-post-restriction' ),
 				'data'    => array( 'status' => 403 ),
 			)
 		);
-		exit;
 	}
 
 
@@ -386,81 +566,114 @@ class papr_page_and_post_restriction {
 	 * @return void
 	 */
 	public function papr_filter_posts( $query ) {
-		if ( $query->is_search && ! is_admin() && $query->is_main_query() ) {
-			if ( ! is_user_logged_in() ) {
-				$this->restricted_posts_to_filter = array_merge(
-					papr_get_restricted_posts_id(),
-					$this->papr_get_toggle_private_ids( $query )
-				);
-				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
-			} else {
-				$allowed_roles_posts = get_option( 'papr_allowed_roles_for_posts', array() );
-				$allowed_roles_pages = get_option( 'papr_allowed_roles_for_pages', array() );
-				$current_user  = wp_get_current_user();
-				$user_roles = $current_user->roles;
-				$not_accessible_posts = array();
-
-				if ( is_array( $allowed_roles_posts ) ) {
-					foreach ( $allowed_roles_posts as $post_id => $roles ) {
-						if ( ! array_intersect( $roles, $user_roles ) ) {
-							$not_accessible_posts[] = $post_id;
-						}
-					}
-				}
-
-				if ( is_array( $allowed_roles_pages ) ) {
-					foreach ( $allowed_roles_pages	 as $post_id => $roles ) {
-						if ( ! array_intersect( $roles, $user_roles ) ) {
-							$not_accessible_posts[] = $post_id;
-						}
-					}
-				}
-				$this->restricted_posts_to_filter = array_merge( $not_accessible_posts );
-				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
-			}
-		}
+		// Restricted items are excluded in SQL rather than removed after the query, so
+		// found_posts - and with it X-WP-Total, search result counts and pagination -
+		// never counts them. Otherwise an anonymous visitor could confirm a restricted
+		// post exists, or test guessed words against its content, from the totals alone.
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
-			$not_accessible_posts = array();
-			$accessible_posts     = array();
-			$user_roles           = is_user_logged_in() ? wp_get_current_user()->roles : array();
-			$allowed_roles_posts  = get_option( 'papr_allowed_roles_for_posts', array() );
-			$allowed_roles_pages  = get_option( 'papr_allowed_roles_for_pages', array() );
-			foreach ( array( $allowed_roles_posts, $allowed_roles_pages ) as $allowed_roles ) {
-				if ( ! is_array( $allowed_roles ) ) {
-					continue;
-				}
-				foreach ( $allowed_roles as $post_id => $roles ) {
-					if ( 'mo_page_0' === $post_id || empty( $roles ) || ! is_array( $roles ) ) {
-						continue;
-					}
-					if ( array_intersect( $roles, $user_roles ) ) {
-						$accessible_posts[] = (int) $post_id;
-					} else {
-						$not_accessible_posts[] = (int) $post_id;
-					}
-				}
-			}
-			if ( ! is_user_logged_in() ) {
-				$not_accessible_posts = array_merge( $not_accessible_posts, papr_get_restricted_posts_id() );
-				$not_accessible_posts = array_merge( $not_accessible_posts, $this->papr_get_toggle_private_ids( $query ) );
-			}
-
-			$not_accessible_posts = array_diff( array_unique( $not_accessible_posts ), $accessible_posts );
-
-			if ( ! empty( $not_accessible_posts ) ) {
-				$this->restricted_posts_to_filter = array_values( $not_accessible_posts );
-				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
-			}
+			$this->papr_exclude_restricted_from_query( $query );
+			return;
 		}
 
-		if ( $query->is_feed() && $query->is_main_query() && ! $query->is_singular() ) {
-			$restricted_ids = $this->papr_get_feed_restricted_ids( $query );
-
-			if ( ! empty( $restricted_ids ) ) {
-				$this->restricted_posts_to_filter = array_values( array_unique( array_merge( $this->restricted_posts_to_filter, $restricted_ids ) ) );
-				add_filter( 'the_posts', array( $this, 'papr_filter_restricted_posts' ), 10, 2 );
+		if ( $query->is_main_query() ) {
+			if ( ! is_admin() && ! $query->is_singular()
+				&& ( $query->is_search() || $query->is_feed() || $query->is_home() || $query->is_archive() ) ) {
+				$this->papr_exclude_restricted_from_query( $query );
 			}
+			return;
 		}
+
+		// Secondary front-end queries: Latest Posts block, Recent Posts widget, Query Loop
+		// block, related posts, get_posts().
+		if ( $this->papr_is_front_end_request() ) {
+			$this->papr_exclude_restricted_from_query( $query );
+		}
+	}
+
+	/**
+	 * Whether the current request serves content to a front-end visitor.
+	 *
+	 * admin-ajax.php is is_admin(), but also serves front-end "Load more" and
+	 * infinite-scroll loaders, so it counts - except for the wp-admin tools listed in
+	 * papr_admin_ajax_actions(), when sent by a user who can edit posts. The action
+	 * name is used rather than the referer, which the client controls. Cron and
+	 * WP-CLI run outside is_admin() with no logged-in user, so they would be treated
+	 * as a logged-out visitor; leave their queries untouched.
+	 *
+	 * @return bool
+	 */
+	private function papr_is_front_end_request() {
+		if ( ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return false;
+		}
+		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only selects the filtering mode.
+			return ! ( current_user_can( 'edit_posts' ) && in_array( $action, $this->papr_admin_ajax_actions(), true ) );
+		}
+		return ! is_admin();
+	}
+
+	/**
+	 * Core wp-admin AJAX actions that list pages/posts for editing tools and must see
+	 * every item: link search, menu screens, Quick Edit, list tables, find posts.
+	 *
+	 * @return string[]
+	 */
+	private function papr_admin_ajax_actions() {
+		$actions = array( 'wp-link-ajax', 'menu-quick-search', 'menu-get-metabox', 'add-menu-item', 'inline-save', 'fetch-list', 'find_posts', 'sample-permalink' );
+
+		/**
+		 * Filters the admin-ajax.php actions that are not restricted for users who can edit posts.
+		 *
+		 * @param string[] $actions AJAX action names.
+		 */
+		return (array) apply_filters( 'papr_admin_ajax_actions', $actions );
+	}
+
+	/**
+	 * Exclude restricted pages/posts from a query in `pre_get_posts`.
+	 *
+	 * @param WP_Query $query The query to restrict.
+	 * @return void
+	 */
+	private function papr_exclude_restricted_from_query( $query ) {
+		$restricted_ids = $this->papr_get_feed_restricted_ids( $query );
+		if ( empty( $restricted_ids ) ) {
+			return;
+		}
+
+		// WP_Query ignores post__not_in when post__in is set (e.g. the sticky posts query).
+		$post_in = array_filter( array_map( 'intval', (array) $query->get( 'post__in' ) ) );
+		if ( ! empty( $post_in ) ) {
+			$post_in = array_values( array_diff( $post_in, $restricted_ids ) );
+			$query->set( 'post__in', empty( $post_in ) ? array( 0 ) : $post_in );
+			return;
+		}
+
+		$post_not_in = array_map( 'intval', (array) $query->get( 'post__not_in' ) );
+		$query->set( 'post__not_in', array_values( array_unique( array_merge( $post_not_in, $restricted_ids ) ) ) );
+	}
+
+	/**
+	 * Remove restricted pages/posts from previous/next post links.
+	 *
+	 * get_adjacent_post() runs its own SQL, with the posts table aliased as `p`,
+	 * so neither `pre_get_posts` nor `the_posts` applies to it.
+	 *
+	 * @param string $where The WHERE clause of the adjacent post query.
+	 * @return string
+	 */
+	public function papr_filter_adjacent_post_where( $where ) {
+		if ( ! $this->papr_is_front_end_request() ) {
+			return $where;
+		}
+
+		$restricted_ids = $this->papr_get_feed_restricted_ids();
+		if ( empty( $restricted_ids ) ) {
+			return $where;
+		}
+
+		return $where . ' AND p.ID NOT IN (' . implode( ',', array_map( 'intval', $restricted_ids ) ) . ')';
 	}
 
 	/**
@@ -468,10 +681,10 @@ class papr_page_and_post_restriction {
 	 * covering "Require Login", the global "make all private" toggle, and
 	 * role-based restriction.
 	 *
-	 * @param WP_Query $query The current query.
+	 * @param WP_Query|null $query The current query, or null for all post types.
 	 * @return int[] Restricted page/post IDs.
 	 */
-	private function papr_get_feed_restricted_ids( $query ) {
+	private function papr_get_feed_restricted_ids( $query = null ) {
 		$restricted_ids = array();
 
 		if ( ! is_user_logged_in() ) {
@@ -498,6 +711,11 @@ class papr_page_and_post_restriction {
 					}
 				}
 			}
+		}
+
+		$front_page_id = $this->papr_static_front_page_id();
+		if ( $this->papr_is_restricted_static_front_page( $front_page_id ) ) {
+			$restricted_ids[] = $front_page_id;
 		}
 
 		return array_values( array_unique( array_filter( array_map( 'intval', $restricted_ids ) ) ) );
@@ -538,55 +756,52 @@ class papr_page_and_post_restriction {
 	 * "make all private" toggle is enabled and the item has not been individually
 	 * exempted. Only enumerates the post type(s) being queried.
 	 *
-	 * @param WP_Query $query The current query.
+	 * @param WP_Query|null $query The current query, or null for all post types.
 	 * @return int[] IDs to exclude from the results.
 	 */
-	private function papr_get_toggle_private_ids( $query ) {
+	private function papr_get_toggle_private_ids( $query = null ) {
 		$ids        = array();
-		$post_types = array_values( array_filter( (array) $query->get( 'post_type' ), 'strlen' ) );
+		$post_types = $query ? array_values( array_filter( (array) $query->get( 'post_type' ), 'strlen' ) ) : array();
 		$all_types  = empty( $post_types ) || in_array( 'any', $post_types, true );
 
 		// Only enumerate published pages/posts when the matching toggle is on.
 		if ( 1 == get_option( 'papr_access_for_only_loggedin' ) && ( $all_types || in_array( 'page', $post_types, true ) ) ) {
-			foreach ( $this->get_all_published_page_ids( 'page' ) as $page_id ) {
-				if ( $this->papr_is_private_for_guests_by_toggle( $page_id, true ) ) {
-					$ids[] = (int) $page_id;
-				}
-			}
+			$ids = array_merge( $ids, $this->papr_get_toggle_private_ids_for_type( 'page' ) );
 		}
 
 		if ( 1 == get_option( 'papr_access_for_only_loggedin_posts' ) && ( $all_types || in_array( 'post', $post_types, true ) ) ) {
-			foreach ( $this->get_all_published_page_ids( 'post' ) as $post_id ) {
-				if ( $this->papr_is_private_for_guests_by_toggle( $post_id, false ) ) {
-					$ids[] = (int) $post_id;
-				}
-			}
+			$ids = array_merge( $ids, $this->papr_get_toggle_private_ids_for_type( 'post' ) );
 		}
 
 		return $ids;
 	}
 
 	/**
-	 * Filter out restricted posts after query execution.
-	 * This approach is more performant than using post__not_in.
+	 * Enumerate toggle-private IDs of one post type, once per request.
 	 *
-	 * @param WP_Post[] $posts Array of post objects.
-	 * @param WP_Query  $query The query object.
-	 * @return WP_Post[] Filtered array of posts.
+	 * Secondary queries and previous/next links call this repeatedly on a single
+	 * page view, and each uncached call loads every published page/post.
+	 *
+	 * @param string $post_type 'page' or 'post'.
+	 * @return int[] IDs to exclude from the results.
 	 */
-	public function papr_filter_restricted_posts( $posts, $query ) {
-		$restricted_posts = $this->restricted_posts_to_filter;
-		if ( empty( $restricted_posts ) ) {
-			return $posts;
+	private function papr_get_toggle_private_ids_for_type( $post_type ) {
+		if ( isset( $this->toggle_private_ids_cache[ $post_type ] ) ) {
+			return $this->toggle_private_ids_cache[ $post_type ];
 		}
 
-		return array_filter(
-			$posts,
-			function ( $post ) use ( $restricted_posts ) {
-				return ! in_array( (int) $post->ID, $restricted_posts, true );
+		$ids     = array();
+		$is_page = 'page' === $post_type;
+		foreach ( $this->get_all_published_page_ids( $post_type ) as $post_id ) {
+			if ( $this->papr_is_private_for_guests_by_toggle( $post_id, $is_page ) ) {
+				$ids[] = (int) $post_id;
 			}
-		);
+		}
+
+		$this->toggle_private_ids_cache[ $post_type ] = $ids;
+		return $ids;
 	}
+
 	/**
 	 * Filter the comment query to add post-query filtering for restricted posts.
 	 *
@@ -602,9 +817,16 @@ class papr_page_and_post_restriction {
 		$routes = ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ? strtolower( $GLOBALS['wp']->query_vars['rest_route'] ) : '';
 		// admin-ajax.php is is_admin(), but serves front-end comment loaders too. Comment
 		// moderators already see every comment in wp-admin, so their AJAX is left alone.
-		$is_ajax_viewer = wp_doing_ajax() && ! current_user_can( 'moderate_comments' );
-		$is_front_end   = ( ! is_admin() || $is_ajax_viewer ) && ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI );
+		$is_ajax_viewer = defined( 'DOING_AJAX' ) && DOING_AJAX && ! current_user_can( 'moderate_comments' );
+		$is_front_end   = ( ! is_admin() || $is_ajax_viewer ) && ! ( defined( 'DOING_CRON' ) && DOING_CRON ) && ! ( defined( 'WP_CLI' ) && WP_CLI );
 		if ( 0 === strpos( $routes, '/wp/v2/comments' ) || $is_front_end ) {
+			// Exclude in SQL too, so found_comments (X-WP-Total) and count queries
+			// don't reveal comments on restricted posts.
+			$restricted_ids = $this->papr_get_feed_restricted_ids();
+			if ( ! empty( $restricted_ids ) ) {
+				$not_in                            = array_map( 'intval', (array) $query->query_vars['post__not_in'] );
+				$query->query_vars['post__not_in'] = array_values( array_unique( array_merge( $not_in, $restricted_ids ) ) );
+			}
 			add_filter( 'the_comments', array( $this, 'papr_filter_restricted_comments' ), 10, 2 );
 		}
 	}
@@ -614,7 +836,8 @@ class papr_page_and_post_restriction {
 	 * execution. Acts as a fallback for comment queries that don't carry a
 	 * `post` request param (so papr_restrict_comments_rest_api() couldn't
 	 * pre-check them) - e.g. GET /wp/v2/comments with no `post` filter.
-	 * This approach is more performant than using post__not_in.
+	 * papr_parse_comment_query() already excludes these posts in SQL; this is a
+	 * safety net for queries that override post__not_in later.
 	 *
 	 * @param WP_Comment[] $comments Array of comment objects.
 	 * @param WP_Comment_Query $query The comment query object.
@@ -687,27 +910,16 @@ class papr_page_and_post_restriction {
 		delete_option( 'papr_admin_api_key' );
 		delete_option( 'papr_customer_token' );
 		delete_option( 'papr_message' );
-		delete_option( 'papr_allowed_roles_for_pages' );
-		delete_option( 'papr_restricted_pages' );
-		delete_option( 'papr_allowed_roles_for_posts' );
-		delete_option( 'papr_restricted_posts' );
-		delete_option( 'papr_allowed_redirect_for_pages' );
-		delete_option( 'papr_allowed_redirect_for_posts' );
-		delete_option( 'papr_login_unrestricted_pages' );
-		delete_option( 'papr_default_role_parent' );
-		delete_option( 'papr_login_unrestricted_posts' );
+		// Restriction rules are kept so that deactivating (even temporarily) never makes
+		// restricted content public on reactivation; uninstall.php deletes them.
 		delete_option( 'papr_page_search_value' );
 		delete_option( 'papr_post_search_value' );
 		delete_option( 'papr_post_type' );
-		delete_option( 'papr_default_role_parent_page_toggle' );
-		delete_option( 'papr_access_for_only_loggedin' );
-		delete_option( 'papr_access_for_only_loggedin_posts' );
 		delete_option( 'papr_results_per_page' );
 		delete_option( 'papr_post_per_page' );
 		delete_option( 'papr_category_per_page' );
 		delete_option( 'papr_guest_enabled' );
 		delete_option( 'papr_roles_per_page' );
-		delete_option( 'papr_allowed_metabox_roles' );
 	}
 
 	static function papr_plugin_settings_script( $page ) {
@@ -772,6 +984,9 @@ class papr_page_and_post_restriction {
 				}
 				break;
 			case 'Private':
+				if ( self::papr_is_restricted_by_role_for_current_user( $post_id ) ) {
+					echo '<span class="papr-quick-edit-restricted" hidden></span>';
+				}
 				if ( isset( $allowed_redirect_pages[ $post_id ] ) || ! empty( $allowed_roles[ $post_id ] ) ) {
 					echo esc_html__( 'Yes', 'page-and-post-restriction' );
 				} else {
@@ -805,6 +1020,9 @@ class papr_page_and_post_restriction {
 				}
 				break;
 			case 'Private':
+				if ( self::papr_is_restricted_by_role_for_current_user( $post_id ) ) {
+					echo '<span class="papr-quick-edit-restricted" hidden></span>';
+				}
 				if ( isset( $allowed_redirect_post[ $post_id ] ) || ! empty( $allowed_roles[ $post_id ] ) ) {
 					echo esc_html__( 'Yes', 'page-and-post-restriction' );
 				} else {
@@ -859,7 +1077,7 @@ class papr_page_and_post_restriction {
 		}
 	}
 
-	function papr_add_custom_meta_box( $post_type ) {
+	function papr_add_custom_meta_box( $post_type, $post = null ) {
 
 		global $pagenow;
 
@@ -883,6 +1101,16 @@ class papr_page_and_post_restriction {
 		}
 
 		if ( ! papr_current_user_can_manage_restriction() ) {
+			return;
+		}
+
+		// Do not show the restriction meta box to users who cannot edit this particular page/post.
+		if ( $post instanceof WP_Post && ! current_user_can( 'edit_post', $post->ID ) ) {
+			return;
+		}
+
+		// Users whose role is restricted from this page/post must not see its restriction settings.
+		if ( $post instanceof WP_Post && self::papr_is_restricted_by_role_for_current_user( $post->ID ) ) {
 			return;
 		}
 
@@ -935,6 +1163,51 @@ class papr_page_and_post_restriction {
 			$papr_message_text = 'Oops! You are not authorized to access this';
 			wp_die( esc_html( $papr_message_text ) );
 		}
+		// "Home Page" settings row with a role restriction (login is implied).
+		if ( is_front_page() && $this->papr_home_row_restricts_current_user() ) {
+			$papr_message_text = 'Oops! You are not authorized to access this';
+			wp_die( esc_html( $papr_message_text ) );
+		}
+	}
+
+	/**
+	 * ID of the static front page, or 0 when the front page shows latest posts.
+	 *
+	 * @return int
+	 */
+	private function papr_static_front_page_id() {
+		return 'page' === get_option( 'show_on_front' ) ? (int) get_option( 'page_on_front' ) : 0;
+	}
+
+	/**
+	 * Whether the "Home Page" settings row (key 0 for Require Login, 'mo_page_0' for
+	 * roles) denies the current visitor.
+	 *
+	 * @return bool
+	 */
+	private function papr_home_row_restricts_current_user() {
+		$redirect   = get_option( 'papr_allowed_redirect_for_pages' );
+		$roles      = get_option( 'papr_allowed_roles_for_pages' );
+		$home_roles = ( is_array( $roles ) && ! empty( $roles['mo_page_0'] ) && is_array( $roles['mo_page_0'] ) ) ? $roles['mo_page_0'] : array();
+
+		if ( ! is_user_logged_in() ) {
+			return ( is_array( $redirect ) && ! empty( $redirect[0] ) ) || ! empty( $home_roles );
+		}
+
+		return ! empty( $home_roles ) && ! array_intersect( array_map( 'strtolower', $home_roles ), array_map( 'strtolower', wp_get_current_user()->roles ) );
+	}
+
+	/**
+	 * Whether $id is the static front page and the "Home Page" settings row denies the
+	 * current visitor. The row is saved under key 0, not the page's own ID, so the
+	 * per-ID checks used by REST, feeds and lists would otherwise miss it.
+	 *
+	 * @param int $id Page or post ID.
+	 * @return bool
+	 */
+	private function papr_is_restricted_static_front_page( $id ) {
+		$id = (int) $id;
+		return $id > 0 && $id === $this->papr_static_front_page_id() && $this->papr_home_row_restricts_current_user();
 	}
 
 	/*If user is logged in then this function checks if the user is restricted to access any page or post*/
@@ -1008,6 +1281,11 @@ class papr_page_and_post_restriction {
 	}
 
 	function papr_initialize_page_restrict() {
+		if ( is_404() ) {
+			$this->papr_strip_restricted_from_404();
+			return;
+		}
+
 		$page_post_id         = get_the_ID() ? get_the_ID() : 0;
 		$guest_user_logged_in = false;
 
@@ -1028,6 +1306,73 @@ class papr_page_and_post_restriction {
 			$this->papr_restrict_logged_in_users( $page_post_id );
 		} else {
 			$this->papr_restrict_by_role( $page_post_id );
+		}
+	}
+
+	/**
+	 * Apply a restricted ancestor's restriction to a page created or re-parented
+	 * outside the page editor (REST API, importers, WP-CLI, duplicator plugins).
+	 *
+	 * The meta box save (papr_save_meta_box_info) handles the editor; without this,
+	 * a child page saved any other way is public even when "apply to child pages"
+	 * is on for its parent. Inherits from the nearest restricted ancestor that
+	 * passes its rules to children (or from any ancestor when the global toggle is on).
+	 *
+	 * @param int     $post_id Page ID.
+	 * @param WP_Post $post    Page object.
+	 * @return void
+	 */
+	public function papr_inherit_parent_restriction( $post_id, $post ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only detects the editor save, which is handled (and verified) in papr_save_meta_box_info().
+		if ( isset( $_POST['papr_meta_box_option_nonce'] ) || isset( $_POST['papr_quick_edit_option_nonce'] ) ) {
+			return;
+		}
+		if ( wp_is_post_revision( $post_id ) || 'auto-draft' === $post->post_status || empty( $post->post_parent ) ) {
+			return;
+		}
+
+		$propagate_all = 1 == get_option( 'papr_default_role_parent_page_toggle' );
+		$propagating   = get_option( 'papr_default_role_parent' );
+		$propagating   = is_array( $propagating ) ? $propagating : array();
+		$redirect      = get_option( 'papr_allowed_redirect_for_pages' );
+		$redirect      = is_array( $redirect ) ? $redirect : array();
+		$roles         = get_option( 'papr_allowed_roles_for_pages' );
+		$roles         = is_array( $roles ) ? $roles : array();
+
+		$source = 0;
+		foreach ( get_post_ancestors( $post ) as $ancestor_id ) {
+			if ( ! $propagate_all && empty( $propagating[ $ancestor_id ] ) ) {
+				continue;
+			}
+			if ( ! empty( $redirect[ $ancestor_id ] ) || ! empty( $roles[ $ancestor_id ] ) ) {
+				$source = (int) $ancestor_id;
+				break;
+			}
+		}
+		if ( ! $source ) {
+			return;
+		}
+
+		if ( ! empty( $redirect[ $source ] ) ) {
+			$redirect[ $post_id ] = true;
+			$unrestricted         = get_option( 'papr_login_unrestricted_pages' );
+			if ( is_array( $unrestricted ) && isset( $unrestricted[ $post_id ] ) ) {
+				unset( $unrestricted[ $post_id ] );
+				update_option( 'papr_login_unrestricted_pages', $unrestricted );
+			}
+			update_option( 'papr_allowed_redirect_for_pages', $redirect );
+		}
+
+		if ( ! empty( $roles[ $source ] ) && is_array( $roles[ $source ] ) ) {
+			$roles[ $post_id ] = $roles[ $source ];
+			update_option( 'papr_allowed_roles_for_pages', $roles );
+
+			$restricted_pages = get_option( 'papr_restricted_pages' );
+			$restricted_pages = is_array( $restricted_pages ) ? $restricted_pages : array();
+			if ( ! papr_in_array( $post_id, $restricted_pages ) ) {
+				$restricted_pages[] = $post_id;
+				update_option( 'papr_restricted_pages', $restricted_pages );
+			}
 		}
 	}
 
@@ -1194,6 +1539,16 @@ class papr_page_and_post_restriction {
 			return;
 		}
 
+		// Do not allow users who cannot edit this particular page/post to change its restriction.
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+
+		// Users whose role is restricted from this page/post must not change its restriction via the meta box or Quick Edit.
+		if ( self::papr_is_restricted_by_role_for_current_user( $post_id ) ) {
+			return;
+		}
+
 		$type = get_post_type( $post );
 
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
@@ -1303,6 +1658,11 @@ class papr_page_and_post_restriction {
 					if ( count( $children ) > 0 ) {
 
 						foreach ( $children as $child ) {
+							// Core only checked edit rights for the page being saved; never rewrite
+							// the restriction of a descendant this user cannot edit (WPSEC-587).
+							if ( ! current_user_can( 'edit_post', $child->ID ) ) {
+								continue;
+							}
 							$child_id = $child->ID;
 
 							$allowed_roles[ $child->ID ] = $allowed_roles[ $post_id ];

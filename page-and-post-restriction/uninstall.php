@@ -33,3 +33,5 @@ delete_option( 'papr_results_per_page' );
 delete_option( 'papr_post_per_page' );
 delete_option( 'papr_category_per_page' );
 delete_option( 'papr_guest_enabled' );
+delete_option( 'papr_roles_per_page' );
+delete_option( 'papr_allowed_metabox_roles' );

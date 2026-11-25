@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Page and Post Restriction
  * Description: This plugin allows frontend page and post restriction based on user roles and login status.
- * Version: 1.6.2
+ * Version: 1.7.0
  * Author: miniOrange
  * Author URI: https://miniorange.com
  * License: Expat
@@ -472,7 +472,8 @@ class papr_page_and_post_restriction {
 
 		$current_user = wp_get_current_user();
 		$user_roles   = $current_user->roles;
-		return empty( array_intersect( $allowed_roles, $user_roles ) );
+		// Case-insensitive, matching the strcasecmp() comparison in papr_restrict_by_role().
+		return empty( array_intersect( array_map( 'strtolower', $allowed_roles ), array_map( 'strtolower', (array) $user_roles ) ) );
 	}
 
 	/**
@@ -1300,6 +1301,13 @@ class papr_page_and_post_restriction {
 				$this->papr_send_feed_forbidden_json();
 			}
 			return;
+		}
+
+		// Decide by the post's real type, not by is_page()/is_single(): those follow the
+		// query vars, so e.g. ?page_id=<post_id>&post_type=post sets is_page() for a post
+		// and the per-type checks below would look in the wrong (pages) settings.
+		if ( is_singular() && $this->papr_is_post_restricted_for_current_user( $page_post_id ) ) {
+			wp_die( esc_html( 'Oops! You are not authorized to access this' ) );
 		}
 
 		if ( ! is_user_logged_in() and ! $guest_user_logged_in ) {
